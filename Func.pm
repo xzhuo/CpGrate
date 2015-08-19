@@ -202,4 +202,210 @@ sub CpG_rate_backup{ #CpG mutation/all CpG site, CpG to TpA count as 2 mutation
 	}
 	return ($CGmut, $lenCpG, $mut, $length);
 }
+
+sub CpG_with_prank{
+	use IO::String;
+	use Bio::TreeIO;
+	#my $prankpath =  "/Users/xiaoyu/bioinfo/prank/bin/";
+	#my $prankpath = "/Users/xiaoyu/bioinfo/prank-msa/src/";
+	#my $prankpath = "/data2/xiaoyu/test_perlCpG/prank/bin";
+	my $prankpath = "/home/xiaoyu/prank/bin/";
+	local $ENV{PATH} = "$ENV{PATH}:$prankpath";
+	
+	my $prank_hash_ref = shift or die $!; #prank parameters
+	my $keepfile = shift;
+#	my $sub_root_id = shift;
+	#$sub_root_id ||= 0;
+	run_prank($prank_hash_ref);
+	my $fasta;
+	my $events;
+	my $tree_file;
+	my $out;
+	my $domain = $prank_hash_ref->{'o'};
+	if ($prank_hash_ref->{'keep'}){
+		$fasta = $domain.".anc.fas";
+		$events = $domain.".events";
+		$tree_file = "$domain.anc.dnd";
+#		open $out, ">$domain".".CpG.out" or die "$!";
+	}
+	else{
+		$fasta = $domain.".best.anc.fas";
+		$events = $domain.".best.events";
+		$tree_file = $domain.".best.anc.dnd";
+#		open $out, ">$domain".".best.CpG.out" or die "$!";
+	}
+	my $str = Bio::AlignIO->new(-file => $fasta,
+					-format => 'fasta',
+				) or die "\nproblem running prank with $fasta\n";;
+	my $aln = $str->next_aln();
+	my $tree_string; #newick format tree string
+	my $tree;
+
+	#get $tree_string and $tree from the dnd file.
+	open my $Tree_fh, "<$tree_file" or die "$!";
+	$tree_string = <$Tree_fh>;
+	my $io = IO::String->new($tree_string);
+	my $treeio = Bio::TreeIO->new(-fh => $io,
+					-format => 'newick',
+				);
+	$tree = $treeio->next_tree;
+	close ($Tree_fh);
+	#close tree filehandle.
+
+	#set up the internal node to calculate CpG ratio within all descendent of it.
+#	my $sub_root;
+#	my @sub_tree_nodes;
+#	my @sub_ids;
+#	if ($sub_root_id){    #if sub_root_id is provided, do the following things:
+#		$sub_root = $tree->find_node($sub_root_id);
+#		@sub_tree_nodes = $sub_root->get_all_Descendents;
+#		foreach (@sub_tree_nodes) {
+#			push @sub_ids, $_->id;
+#		}
+#	}
+
+	my $sub_mutCpA = 0;
+	my $sub_mutTpG = 0;
+	my $sub_numCpG = 0;
+	my $sub_mutC = 0;
+	my $sub_mutG = 0;
+	my $sub_numC = 0;
+	my $sub_numG = 0;
+
+	my $all_mutCpA = 0;
+	my $all_mutTpG = 0;
+	my $all_numCpG = 0;
+	my $all_mutC = 0;
+	my $all_mutG = 0;
+	my $all_numC = 0;
+	my $all_numG = 0;
+	
+	open my $Fh, "<$events" or die "$!";
+	while (<$Fh>) {
+		chomp;
+		next unless $_;
+		#read tree from dnd file instead.
+		#if(/;$/){
+		#	$tree_string = $_;
+		#	my $io = IO::String->new($tree_string);
+		#	my $treeio = Bio::TreeIO->new(-fh => $io,
+		#					-format => 'newick',
+		#					);
+		#	$tree = $treeio->next_tree;
+		#}
+		my @line = split();
+		if($line[0] eq "branch"){ #if this is branch name line
+			my $current_node_id = $line[1]; 
+			my $node = $tree->find_node($current_node_id);
+			next unless $node->ancestor;
+			my $ancestor_id = $node->ancestor->id; #find the node leads to current branch
+#			print "$ancestor_id\t$current_node_id\n";
+			my $anc_obj = $aln->get_seq_by_id($ancestor_id);
+			my $cur_obj = $aln->get_seq_by_id($current_node_id);
+#			print "$anc_obj\t$cur_obj\n";
+			my ($numC, $mutC, $numG, $mutG, $numCpG, $mutTpG, $mutCpA) = Func::CpG_rate($anc_obj,$cur_obj);
+			$all_numC += $numC;
+			$all_mutC += $mutC;
+			$all_numG += $numG;
+			$all_mutG += $mutG;
+			$all_numCpG += $numCpG;
+			$all_mutTpG += $mutTpG;
+			$all_mutCpA += $mutCpA;
+#			if($sub_root_id && $current_node_id ~~ @sub_ids){ #if sub_root_id is provided, do the following things:
+#				$sub_numC += $numC;
+#				$sub_mutC += $mutC;
+#				$sub_numG += $numG;
+#				$sub_mutG += $mutG;
+#				$sub_numCpG += $numCpG;
+#				$sub_mutTpG += $mutTpG;
+#				$sub_mutCpA += $mutCpA;
+#			}
+
+			my $branchratio;
+			eval { $branchratio = ($mutTpG/$numCpG)/($mutC/$numC);};
+			$branchratio = $@?"NA":sprintf("%.2f",$branchratio); #leave only 2 digits.
+			$tree_string =~ s/$current_node_id/$current_node_id $branchratio/;
+			#$node->description($branchratio);
+#			print $out "$current_node_id\t$numC\t$mutC\t$numG\t$mutG\t$numCpG\t$mutTpG\t$mutCpA\n";
+		}
+	}
+	#my $treeout = Bio::TreeIO->new(-file => ">$domain.CpG.new",
+	#				-format => 'newick',
+	#			);
+	#$treeout->write_tree($tree);
+	#print Dumper($tree);
+#	print $out "$tree_string\n";
+#	print $out "$all_numC\t$all_mutC\t$all_numG\t$all_mutG\t$all_numCpG\t$all_mutTpG\t$all_mutCpA\n";
+#	my $ratio;
+#	eval { $ratio = ($all_mutTpG/$all_numCpG)/($all_mutC/$all_numC);};
+#	$ratio = "NA" if $@;
+#	printf $out "%.2f", $ratio;
+#	print $out "\n";
+
+#	if($sub_root_id){  #if sub_root_id is provided, do the following things:
+#		my $subratio;
+#		eval {$subratio = ($sub_mutTpG/$sub_numCpG)/($sub_mutC/$sub_numC);};
+#		$subratio = $@?"NA":sprintf("%.2f",$subratio);
+#		print $out "$sub_root_id\n$sub_numC\t$sub_mutC\t$sub_numG\t$sub_mutG\t$sub_numCpG\t$sub_mutTpG\t$sub_mutCpA\n";
+#		print $out "$sub_root_id subratio is $subratio\n";
+#	}
+	close ($Fh);
+#	close ($out);
+	unlink($fasta, $events, $tree_file, "$domain.fas") if $keepfile == 0;
+	return ($all_numC,$all_mutC,$all_numG,$all_mutG,$all_numCpG,$all_mutTpG,$all_mutCpA);
+}
+
+
+#how to build the prank_hash: "d" => "some.fas" for -d=some.fas, "F" =>0 for -F in command line.
+sub run_prank{ # argument is the prank argument hash ref.
+	my $prank = "prank";
+	my %inhash = %{shift()};
+	my @params = ($prank);
+	my $fasta = $inhash{d};
+	#rename sequence nome in fasta file to bypass a prank bug.
+#	renamefasta($fasta);
+#	$inhash{d} = "$fasta.new.fa";
+	
+	foreach my $key (keys %inhash){
+		#	if ($inhash{$key} == 1){
+		#	$para = "-".$key;
+		#}
+		#else{
+		#		$para = "-".$key."=".$inhash{$key};
+		#}
+		next unless $inhash{$key};
+		my $param;
+		{
+			no warnings; #disable warnings for this block (string in numeric ===)
+			$param = ($inhash{$key} == 1)?("-".$key):("-".$key."=".$inhash{$key});
+		}
+		push @params, $param;
+	}
+	my $params = join ' ', @params;
+	print "$params\n";
+	system($params);
+#	unlink "$fasta.new.fa";
+}
+
+#rename fasta seq name to work with phylip alignment file restriction.
+sub renamefasta{
+	my $infile = shift;
+	my %namehash;
+	open my $in, "<$infile" or die "$!";
+	open my $out, ">$infile.new.fa" or die "$!";
+	my $newname = "aaaaaaaaaa";
+	while (<$in>) {
+		if (/^>/){
+			my ($name) = ($_ =~ /^>(.+)\n$/);
+			die "too many sequences for the renamefasta sub!!!" if $newname eq "aaaaaaaaaaa";
+			$namehash{$newname} = $name;
+			print $out ">$newname\n";
+			$newname++;
+		}
+		else{
+			print $out "$_";
+		}
+	}
+	return(\%namehash);
+}
 1;

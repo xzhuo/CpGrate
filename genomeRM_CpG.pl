@@ -8,10 +8,12 @@ modified from John Pace's script.
 
 =head2 USAGE
 
-perl genomeRM_CpG.pl -a <RM align file>  [-p <con|CG|aln|all>] [-c <class name>] [-r <repeat name>] [-s <INT> -l <INT>] [-h help]
+perl genomeRM_CpG.pl -a <RM align file> [-m <c|a>] [-p <con|CG|aln|all>] [-c <class name>] [-r <repeat name>] [-s <INT> -l <INT>] [-h help]
 
 options:
 -a the repeatmasker alignment file.
+
+-m the model, "c" for consensus based CpG calculation, "a" for alignment based calculation. Default value is "c".
 
 -p 
 con: output only regenerated consensus, default. Mutually exclusive with "aln".
@@ -31,13 +33,18 @@ maxstart. int. Only repeats with repstart <= maxstart are used for consensus reg
 -l
 maxleft. int. Only repeats with repleft <= maxleft are used for consensus regeneration. Work together with -s to defined complete TE. Recommend 50.
 
+-u
+number of processes in multithreads.
+
 ps: if -s and -l are not defined, any fragment matches particular TE would be included in the alignment for calculation.
 
 -h
 help
 
 =cut
-
+#use forks;
+#use forks::shared;
+use Parallel::ForkManager;
 use FindBin qw($RealBin);
 use lib $RealBin;
 use warnings;
@@ -46,15 +53,27 @@ use Func;
 use Getopt::Std;
 use Bio::SimpleAlign;
 use Bio::LocatableSeq;
+use Bio::AlignIO;
+use File::Temp qw/ tempfile/;
+use Fcntl qw(:flock SEEK_END);
+use IO::Handle;
+
+STDERR->autoflush(1);
+STDOUT->autoflush(1);
 
 my %opts=();
-getopts("ha:p:c:r:s:l:", \%opts);
-my $usage = "perl ParseRMalign_regenerate_consensus.pl -a <RM align file>  [-p <con|CG|aln|all>] [-c <class name>] [-r <repeat name>] [-s <INT> -l <INT>]";
+getopts("ha:m:p:c:r:s:l:u:", \%opts);
+my $usage = "perl ParseRMalign_regenerate_consensus.pl -a <RM align file> [-m <c|a>] [-p <con|CG|aln|all>] [-c <class name>] [-r <repeat name>] [-s <INT> -l <INT>] [-u <INT>]";
 die "$usage" if $opts{h};
 my $fileName = $opts{a} or die "$usage";
 $opts{p} ||= "con"; #set default parameter for p: only output consensus.
 die "$usage" unless $opts{p} eq "con" || $opts{p} eq "CG" || $opts{p} eq "all" || $opts{p} eq "aln";
+$opts{m} ||= "c"; #set default model as consensus
+die "$usage" unless $opts{m} eq "c" || $opts{m} eq "a";
+$opts{u} ||= 1;
+my $cpus = $opts{u};
 my $purpose = $opts{p};
+my $model = $opts{m};
 my $targetClass = $opts{c} if defined $opts{c};
 my $targetRepeat= $opts{r} if defined $opts{r};
 my $maxStart;
@@ -109,7 +128,7 @@ my %repHash = ();
 
 #Loop through the array, parsing the lines and add to an output file
 for(my $i = 0; $i<= $#alignArray;$i++){
-	print "$i\n" if (($i % 10000) == 0); #print line number of every 10000 lines
+#	print "$i\n" if (($i % 10000) == 0); #print line number of every 10000 lines
 
 	#Declare the variables
 	my $genoName = '';
@@ -222,16 +241,18 @@ for(my $i = 0; $i<= $#alignArray;$i++){
 		#delete insertions and create new mutiple alignment
 		$chrSeq = uc($chrSeq);
 		$repSeq = uc($repSeq); 
-		my @gaps = Func::find($repSeq, "-"); #gap in repSeq means insertions in chrSeq, we have to delete them!
-		my @descending_gaps = sort { $b<=>$a } @gaps;
+		my $gaps_ref = Func::find($repSeq, "-"); #gap in repSeq means insertions in chrSeq, we have to delete them!
+		my @descending_gaps = sort { $b<=>$a } @$gaps_ref;
 		foreach my $gap(@descending_gaps){
 			substr($chrSeq, $gap-1, 1) = "";
 		}
+		$chrSeq =~ s/[^ATGC]/-/g;
+		$repSeq =~ s/[^ATGC]/-/g;
 		next if $chrSeq eq ""; #remove suspicious sequences (I don't know why they are in the alignment in the first place. but the fact that they have different seq length causes a problem for MSA building).
 		$chrSeq = "-"x($repStart-1).$chrSeq."-"x($repLeft);
 #		print "$headline\n$chrSeq\n";
 		my $tempSeq = Bio::LocatableSeq->new(-seq => $chrSeq,
-							-id => "$genoName".":$genoStart"."-$genoEnd$strand",
+							-id => "$genoName"."_$genoStart"."-$genoEnd$strand",
 							#	-start => $repStart,
 							#	-end => $repEnd,
 							-alphabet => "dna",
@@ -250,36 +271,64 @@ undef @alignArray;
 
 #open the outfile
 my $outFile;
+#my @outFile  : shared;
 my $newFasta;
+#my @newFasta : shared;
+my $pm = Parallel::ForkManager->new($cpus);
+#parse repHash to regenerate consensus for all repeats:
+
+
 if ($purpose eq "CG" || $purpose eq "all"){
 	open $outFile, ">$outName";
 	print $outFile "te\tcopies\tnumC\tmutC\tnumG\tmutG\tnumCpG\tmutTpG\tmutCpA\n";
+#	foreach (@outFile){
+#		print $outFile "$_\n";
+#	}
+#	close ($outFile);
 }
 if ($purpose eq "con" || $purpose eq "aln" || $purpose eq "all"){
 	open $newFasta, ">$outFasta";
+#	foreach (@newFasta){
+#		print $newFasta ">$_->[0]\n$_->[1]\n";
+#	}
+#	close ($newFasta);
 }
-#parse repHash to regenerate consensus for all repeats:
+
+
 while (my ($te, $msa) = each(%repHash)){
+	my $pid = $pm->start and next;
 	print "working on $te:\n";
 	unless ($msa->is_flush){ # quit and print error message if not all seqs in alignment have same length.
 		foreach my $seq_obj($msa->each_seq){
-			print $seq_obj->display_id()."\t";
-			print $seq_obj->length()."\n";
-			print $seq_obj->seq()."\n";
+			print STDERR "$te\t".$seq_obj->display_id()."\t";
+			print STDERR $seq_obj->length()."\n";
+			print STDERR $seq_obj->seq()."\n";
 		}
+		print "$te alignment is not flush!!\n";
 		die "$te alignment is not flush!!\n";
 	}
-	my $consensus_obj = $msa->consensus_meta();
-	my $consensus = $consensus_obj->seq();
+	my $consensus = $msa->consensus_string();
+	my $consensus_obj = Bio::LocatableSeq->new(-seq => $consensus,
+						-id => "consensus",
+						-alphabet => "dna",
+					);
 	my $copies = $msa->num_sequences();
+	flock $newFasta, LOCK_EX or die "can't lock!!" if $purpose eq "con" || $purpose eq "all";
 	print $newFasta ">$te\n$consensus\n" if $purpose eq "con" || $purpose eq "all";
+	flock $newFasta, LOCK_UN or die "can't unlock!!" if $purpose eq "con" || $purpose eq "all";
+
+#	push (@newFasta, [$te,$consensus]);
 	if ($purpose eq "aln"){
 		foreach my $seq_obj($msa->each_seq){
 			my $temp_id = $seq_obj->display_id();
 			my $temp_seq = $seq_obj->seq();
+			flock $newFasta, LOCK_EX or die "can't lock!!";
 			print $newFasta ">$temp_id\n$temp_seq\n";
+			flock $newFasta, LOCK_UN or die "can't unlock!!";
+#			push (@newFasta, [$temp_id,$temp_seq]);
 		}
 	}
+	$pm->finish if $copies == 1;
 	if ($purpose eq "CG" || $purpose eq "all"){
 		my $numCpG = 0; #number of all CpG sites in repSeq
 		my $mutTpG = 0; #number of mutated CpG to TpG
@@ -288,22 +337,65 @@ while (my ($te, $msa) = each(%repHash)){
 		my $mutC = 0; #number of all C to T transitions in repSeq (excluding CpG sites)
 		my $numG = 0; #number of all G sites in repseq
 		my $mutG = 0; #number of all G to A transitions in repseq
-		foreach my $genoSeq_obj ($msa->each_seq){
-			my ($C, $T, $G, $A, $CpG, $TpG, $CpA) = Func::CpG_rate($consensus_obj, $genoSeq_obj);
-			$numC = $numC + $C;
-			$mutC = $mutC + $T;
-			$numG = $numG + $G;
-			$mutG = $mutG + $A;
-			$numCpG = $numCpG + $CpG;
-			$mutTpG = $mutTpG + $TpG;
-			$mutCpA = $mutCpA + $CpA;
+		if ($model eq "c"){
+			foreach my $genoSeq_obj ($msa->each_seq){
+				my ($C, $T, $G, $A, $CpG, $TpG, $CpA) = Func::CpG_rate($consensus_obj, $genoSeq_obj);
+				$numC += $C;
+				$mutC += $T;
+				$numG += $G;
+				$mutG += $A;
+				$numCpG += $CpG;
+				$mutTpG += $TpG;
+				$mutCpA += $CpA;
+			}
 		}
+		if ($model eq "a"){
+			##write fasta to $fasta
+			my ($filehandle, $fasta) = tempfile(DIR => '/home/xiaoyu/temp');
+			my $out = Bio::AlignIO->new(-file => ">$fasta",
+							-format =>'fasta',
+							-displayname_flat => 1, #to avoid an AlignIO bug.
+						);
+			$out->write_aln($msa);
+			my $prank_hash_ref = {"d" => $fasta,
+						"showanc" => 1,
+						"showevents" => 1,
+						"keep" => 1,
+						"uselogs" => 1,
+						"quiet" => 1,
+						"o" => "$fasta.CpG.out",
+			};
+			($numC,$mutC,$numG,$mutG,$numCpG,$mutTpG,$mutCpA) = Func::CpG_with_prank($prank_hash_ref,0);
+			unlink($fasta);
+		}
+		flock $outFile, LOCK_EX or die "can't lock!!";
 		print $outFile "$te\t$copies\t$numC\t$mutC\t$numG\t$mutG\t$numCpG\t$mutTpG\t$mutCpA\n";
+		flock $outFile, LOCK_UN or die "can't unlock!!";
+#		push (@outFile, "$te\t$copies\t$numC\t$mutC\t$numG\t$mutG\t$numCpG\t$mutTpG\t$mutCpA"); 
 	}
+	print "$te analysis done!!!\n";
+	$pm->finish;
 }
 
-close($outFile) if ($purpose eq "CG" || $purpose eq "all");
-close($newFasta) if ($purpose eq "con" || $purpose eq "all");
+$pm->wait_all_children;
+print "all threads done!!!\n\n";
+if ($purpose eq "CG" || $purpose eq "all"){
+#	open $outFile, ">$outName";
+#	print $outFile "te\tcopies\tnumC\tmutC\tnumG\tmutG\tnumCpG\tmutTpG\tmutCpA\n";
+#	foreach (@outFile){
+#		print $outFile "$_\n";
+#	}
+	close ($outFile);
+}
+if ($purpose eq "con" || $purpose eq "aln" || $purpose eq "all"){
+#	open $newFasta, ">$outFasta";
+#	foreach (@newFasta){
+#		print $newFasta ">$_->[0]\n$_->[1]\n";
+#	}
+	close ($newFasta);
+}
+#close($outFile) if ($purpose eq "CG" || $purpose eq "all");
+#close($newFasta) if ($purpose eq "con" || $purpose eq "aln" || $purpose eq "all");
 
 exit;
 
