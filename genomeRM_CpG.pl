@@ -175,6 +175,7 @@ for(my $i = 0; $i<= $#alignArray;$i++){
 			($repLeft) = $arraySplit[11] =~ /\((.+)\)/;
 			$repEnd = $arraySplit[12];
 			$repStart = $arraySplit[13];
+			$id = $arraySplit[-1];
 			#repClass has to be split further (modified from John Pace's)
 			($repClass, $repFamily) = split(/\//, $repClass);
 		}
@@ -185,6 +186,7 @@ for(my $i = 0; $i<= $#alignArray;$i++){
 			$genoStart = $arraySplit[5];
 			$genoEnd = $arraySplit[6];
 			$strand = '+';
+			$id = $arraySplit[-1];
 			if ($arraySplit[8] eq '+'){
 				$repName = $arraySplit[9]; #note: the mm10 and hg19 are different at these lines!
 				$repClass = $arraySplit[10];
@@ -249,25 +251,150 @@ for(my $i = 0; $i<= $#alignArray;$i++){
 		$chrSeq =~ s/[^ATGC]/-/g;
 		$repSeq =~ s/[^ATGC]/-/g;
 		next if $chrSeq eq ""; #remove suspicious sequences (I don't know why they are in the alignment in the first place. but the fact that they have different seq length causes a problem for MSA building).
-		$chrSeq = "-"x($repStart-1).$chrSeq."-"x($repLeft);
-#		print "$headline\n$chrSeq\n";
-		my $tempSeq = Bio::LocatableSeq->new(-seq => $chrSeq,
-							-id => "$genoName"."_$genoStart"."-$genoEnd$strand",
-							#	-start => $repStart,
-							#	-end => $repEnd,
-							-alphabet => "dna",
-						);
-		#add the chrSeq with insertions deleted to the MSA:
-		if (exists $repHash{$repName}){
-			$repHash{$repName}->add_seq($tempSeq);
+
+		my $seq_hash_ref = { "chrSeq" => $chrSeq,
+					"repSeq" => $repSeq,
+					"chr" => $genoName,
+					"chrStart" => $genoStart,
+					"chrEnd" => $genoEnd,
+					"repStart" => $repStart,
+					"repEnd" => $repStart,
+					"repLeft" => $repLeft,
+					"strand" => $strand,
+					"id" => $id, 
+				};
+		if(exists $repHash{$repName}{
+			push @$repHash{$repName}, $seq_hash_ref;
 		}
 		else{
-			my $tempAln = Bio::SimpleAlign->new(-seqs => [$tempSeq]);
-			$repHash{$repName} = $tempAln;
+			$repHash{$repName} = [$seq_hash_ref];
 		}
+
 	}
 }
 undef @alignArray;
+
+my $alnHash = ();
+while (my ($te, $array_ref) = each(%repHash)){
+	sort $array_ref blahblah
+	my $curr_ref;
+	foreach my $hash_ref(@$array_ref){
+		unless (defined $curr_ref){
+			$curr_ref = $hash_ref;
+		}
+		elsif ($hash_ref{"id"} == $curr_ref{"id"} and $hash_ref{"chr"} eq $curr_ref{"chr"} and $hash_ref{"chrStart"} < $curr_ref{"chrEnd"} + 10000 and $curr_ref{"strand"} eq "+"?abs($hash_ref{"repStart"}-$curr_ref{"repEnd"})<20:abs($hash_ref{"repEnd"}-$curr_ref{"repStart"})<20){
+			#merge record
+			$curr_ref{"chrEnd"}=$hash_ref{"chrEnd"};
+			if ($curr_ref{"strand"} eq "+"){
+				$curr_ref{"repEnd"} = $hash_ref{"repEnd"};
+				$curr_ref{"repLeft"} = $hash_ref{"repLeft"};
+				if($hash_ref{"repStart"}>$curr_ref{"repEnd"}){
+					$curr_ref{"chrSeq"} = $curr_ref{"chrSeq"}."-"x($hash_ref{"repStart"}-$curr_ref{"repEnd"}-1).$hash_ref{"chrSeq"};
+					$curr_ref{"repSeq"} = $curr_ref{"repSeq"}."-"x($hash_ref{"repStart"}-$curr_ref{"repEnd"}-1).$hash_ref{"repSeq"};
+				}
+				else{
+					#deal with overlap
+					my $overlap = $curr_ref{"repEnd"}-$hash_ref{"repStart"}+1;
+					my $curr_chrSeq = substr($curr_ref{"chrSeq"},0,0-$overlap);
+					my $hash_chrSeq = substr($hash_ref{"chrSeq"},$overlap);
+					my $curr_repSeq = substr($curr_ref{"repSeq"},0,0-$overlap);
+					my $hash_repSeq = substr($hash_ref{"repSeq"},$overlap);
+					my $tempseq1 = substr($curr_ref{"chrSeq"},0-$overlap);
+					my $tempseq2 = substr($hash_ref{"chrSeq"},0,$overlap);
+					my $consensus = substr($hash_ref{"repSeq"},0,$overlap);
+					my $overseq = "";
+					for(my $i=0;$i++,$i<length($consensus)){
+						my $nt = substr($tempseq1,$i,1) eq $substr($tempseq2,$i,1)?substr($tempseq1,$i,1):substr($consensus,$i,1);
+						substr($overlap,length($overlap))=$nt;
+					}
+					$curr_ref{"chrSeq"} = $curr_chrSeq.$overseq.$hash_chrSeq;
+					$curr_ref{"repSeq"} = $curr_repSeq.$overseq.$hash_repSeq;
+				}
+			}
+			else{
+				$curr_ref{"repStart"} = $hash_ref{"repStart"};
+				if($hash_ref{"repEnd"}<$curr_ref{"repStart"}){
+					$curr_ref{"chrSeq"} = $hash_ref{"chrSeq"}."-"x($curr_ref{"repStart"}-$hash_ref{"repEnd"}-1).$curr_ref{"chrSeq"};
+					$curr_ref{"repSeq"} = $hash_ref{"repSeq"}."-"x($curr_ref{"repStart"}-$hash_ref{"repEnd"}-1).$curr_ref{"repSeq"};
+				}
+				else{
+					#deal with overlap
+					my $overlap = $hash_ref{"repEnd"}-$curr_ref{"repStart"}+1;
+					my $curr_chrSeq = substr($curr_ref{"chrSeq"},$overlap);
+					my $hash_chrSeq = substr($hash_ref{"chrSeq"},0,0-$overlap);
+					my $curr_repSeq = substr($curr_ref{"repSeq"},$overlap);
+					my $hash_repSeq = substr($hash_ref{"repSeq"},0,0-$overlap);
+					my $tempseq1 = substr($curr_ref{"chrSeq"},0,$overlap);
+					my $tempseq2 = substr($hash_ref{"chrSeq"},0-$overlap);
+					my $consensus = substr($hash_ref{"repSeq"},0-$overlap);
+					my $overseq = "";
+					for(my $i=0;$i++,$i<length($consensus)){
+						my $nt = substr($tempseq1,$i,1) eq $substr($tempseq2,$i,1)?substr($tempseq1,$i,1):substr($consensus,$i,1);
+						substr($overlap,length($overlap))=$nt;
+					}
+					$curr_ref{"chrSeq"} = $hash_chrSeq.$overseq.$curr_chrSeq;
+					$curr_ref{"repSeq"} = $hash_repSeq.$overseq.$curr_repSeq;
+				}
+			}
+		}
+		else{
+			#assign new bio::seq to alignemnt
+			my $chrSeq = "-"x($curr_ref{"repStart"}-1).$curr_ref{"chrSeq"}."-"x($curr_ref{"repLeft"});
+#			print "$headline\n$chrSeq\n";
+			my $tempSeq = Bio::LocatableSeq->new(-seq => $chrSeq,
+								-id => $curr_ref{"chr"}."_$curr_ref{"chrStart"}"."-$curr_ref{"chrEnd"}$curr_ref{"strand"}",
+								-alphabet => "dna",
+							);
+			#add the chrSeq with insertions deleted to the MSA:
+			if (exists $alnHash{$te}){
+				$alnHash{$te}->add_seq($tempSeq);
+			}
+			else{
+				my $tempAln = Bio::SimpleAlign->new(-seqs => [$tempSeq]);
+				$alnHash{$te} = $tempAln;
+			}
+			$curr_ref = $hash_ref;
+		}
+		#assign last bio::seq to alignemnt
+		my $chrSeq = "-"x($curr_ref{"repStart"}-1).$curr_ref{"chrSeq"}."-"x($curr_ref{"repLeft"});
+#		print "$headline\n$chrSeq\n";
+		my $tempSeq = Bio::LocatableSeq->new(-seq => $chrSeq,
+							-id => $curr_ref{"chr"}."_$curr_ref{"chrStart"}"."-$curr_ref{"chrEnd"}$curr_ref{"strand"}",
+							-alphabet => "dna",
+						);
+		#add the chrSeq with insertions deleted to the MSA:
+		if (exists $alnHash{$te}){
+			$alnHash{$te}->add_seq($tempSeq);
+		}
+		else{
+			my $tempAln = Bio::SimpleAlign->new(-seqs => [$tempSeq]);
+			$alnHash{$te} = $tempAln;
+		}
+	}
+
+}
+undef $repHash;
+	
+
+
+#		$chrSeq = "-"x($repStart-1).$chrSeq."-"x($repLeft);
+##		print "$headline\n$chrSeq\n";
+#		my $tempSeq = Bio::LocatableSeq->new(-seq => $chrSeq,
+#							-id => "$genoName"."_$genoStart"."-$genoEnd$strand",
+#							#	-start => $repStart,
+#							#	-end => $repEnd,
+#							-alphabet => "dna",
+#						);
+#		#add the chrSeq with insertions deleted to the MSA:
+#		if (exists $repHash{$repName}){
+#			$repHash{$repName}->add_seq($tempSeq);
+#		}
+#		else{
+#			my $tempAln = Bio::SimpleAlign->new(-seqs => [$tempSeq]);
+#			$repHash{$repName} = $tempAln;
+#		}
+
+
 
 #open the outfile
 my $outFile;
@@ -275,7 +402,7 @@ my $outFile;
 my $newFasta;
 #my @newFasta : shared;
 my $pm = Parallel::ForkManager->new($cpus);
-#parse repHash to regenerate consensus for all repeats:
+#parse alnHash to regenerate consensus for all repeats:
 
 
 if ($purpose eq "CG" || $purpose eq "all"){
@@ -295,7 +422,7 @@ if ($purpose eq "con" || $purpose eq "aln" || $purpose eq "all"){
 }
 
 
-while (my ($te, $msa) = each(%repHash)){
+while (my ($te, $msa) = each(%alnHash)){
 	my $pid = $pm->start and next;
 	print "working on $te:\n";
 	unless ($msa->is_flush){ # quit and print error message if not all seqs in alignment have same length.
