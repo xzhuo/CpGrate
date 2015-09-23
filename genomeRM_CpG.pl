@@ -58,6 +58,8 @@ use File::Temp qw/ tempfile/;
 use Fcntl qw(:flock SEEK_END);
 use IO::Handle;
 
+use Data::Dumper;
+
 STDERR->autoflush(1);
 STDOUT->autoflush(1);
 
@@ -145,6 +147,7 @@ for(my $i = 0; $i<= $#alignArray;$i++){
 	my $repSeq = '';
 	my $beginningRow = 0; #beginningRow is used to keep track of the start of the repeat seq block
 	my $endingRow = 0;  #endingRow is used to keep track of the end of the repeat seq block
+	my $id = 0;
 
 	#Check to see if the first two characters of the array row are digits (indicate this is header line of each record)
 	if($alignArray[$i] =~ /^\d+\s/){
@@ -208,7 +211,7 @@ for(my $i = 0; $i<= $#alignArray;$i++){
 		next if $repLeft < 0; #some problem with repeatMasker program? skip this suspicious record if $repLeft <0.
 		#example in hg19: 5114  22.26 8.60 4.26  chr3  165270866 165271015 (32751415) + MLT1-int        LTR/ERVL-MaLR       1634   1734 (-363)  410
 
-		next if ((defined $targetClass) && ($repClass ne $targetClass)) || ((defined $targetRepeat) && ($repName ne $targetRepeat)) || ((defined $maxStart) && ($repStart > $maxStart)) || ((defined $maxLeft) && ($repLeft > $maxLeft)); #only do this with the $targetClass or $targetRepeat and repeat satisfy $maxStart and $maxLeft.
+		next if ((defined $targetClass) && ($repClass ne $targetClass)) || ((defined $targetRepeat) && ($repName ne $targetRepeat)); #only do this with the $targetClass or $targetRepeat.
 
 		#All the variables are set now, except chrSeq and repSeq.
 		for (my $k = ($beginningRow +1);$k<=($endingRow-1);$k++){
@@ -258,108 +261,132 @@ for(my $i = 0; $i<= $#alignArray;$i++){
 					"chrStart" => $genoStart,
 					"chrEnd" => $genoEnd,
 					"repStart" => $repStart,
-					"repEnd" => $repStart,
+					"repEnd" => $repEnd,
 					"repLeft" => $repLeft,
 					"strand" => $strand,
 					"id" => $id, 
 				};
-		if(exists $repHash{$repName}{
-			push @$repHash{$repName}, $seq_hash_ref;
+		if(exists $repHash{$repName}){
+			push @{$repHash{$repName}}, $seq_hash_ref;
 		}
 		else{
 			$repHash{$repName} = [$seq_hash_ref];
 		}
-
 	}
 }
 undef @alignArray;
-
-my $alnHash = ();
+print "everything te in seq_hash_ref now,building simplealign:\n";
+#my $pm1 = Parallel::ForkManager->new($cpus);
+my %alnHash = ();
 while (my ($te, $array_ref) = each(%repHash)){
-	sort $array_ref blahblah
+#	my $pid = $pm1->start and next;
+	print "te name is $te\n\n";
+	@$array_ref = sort {$a->{"chr"} cmp $b->{"chr"} or $a->{"chrStart"} <=> $b->{"chrStart"} or $a->{"chrEnd"} <=> $b->{"chrEnd"}} @$array_ref; 
 	my $curr_ref;
 	foreach my $hash_ref(@$array_ref){
 		unless (defined $curr_ref){
 			$curr_ref = $hash_ref;
 		}
-		elsif ($hash_ref{"id"} == $curr_ref{"id"} and $hash_ref{"chr"} eq $curr_ref{"chr"} and $hash_ref{"chrStart"} < $curr_ref{"chrEnd"} + 10000 and $curr_ref{"strand"} eq "+"?abs($hash_ref{"repStart"}-$curr_ref{"repEnd"})<20:abs($hash_ref{"repEnd"}-$curr_ref{"repStart"})<20){
+		elsif ($hash_ref->{"id"} == $curr_ref->{"id"} and $hash_ref->{"chr"} eq $curr_ref->{"chr"} and $hash_ref->{"strand"} eq $curr_ref->{"strand"} and $hash_ref->{"chrStart"} < $curr_ref->{"chrEnd"} + 10000 and $curr_ref->{"strand"} eq "+"?abs($hash_ref->{"repStart"}-$curr_ref->{"repEnd"})<20:abs($hash_ref->{"repEnd"}-$curr_ref->{"repStart"})<20){
 			#merge record
-			$curr_ref{"chrEnd"}=$hash_ref{"chrEnd"};
-			if ($curr_ref{"strand"} eq "+"){
-				$curr_ref{"repEnd"} = $hash_ref{"repEnd"};
-				$curr_ref{"repLeft"} = $hash_ref{"repLeft"};
-				if($hash_ref{"repStart"}>$curr_ref{"repEnd"}){
-					$curr_ref{"chrSeq"} = $curr_ref{"chrSeq"}."-"x($hash_ref{"repStart"}-$curr_ref{"repEnd"}-1).$hash_ref{"chrSeq"};
-					$curr_ref{"repSeq"} = $curr_ref{"repSeq"}."-"x($hash_ref{"repStart"}-$curr_ref{"repEnd"}-1).$hash_ref{"repSeq"};
+			if ($curr_ref->{"strand"} eq "+"){
+				if($hash_ref->{"repStart"}>$curr_ref->{"repEnd"}){
+					$curr_ref->{"chrSeq"} = $curr_ref->{"chrSeq"}."-"x($hash_ref->{"repStart"}-$curr_ref->{"repEnd"}-1).$hash_ref->{"chrSeq"};
+					$curr_ref->{"repSeq"} = $curr_ref->{"repSeq"}."-"x($hash_ref->{"repStart"}-$curr_ref->{"repEnd"}-1).$hash_ref->{"repSeq"};
+					$curr_ref->{"repEnd"} = $hash_ref->{"repEnd"};
+					$curr_ref->{"repLeft"} = $hash_ref->{"repLeft"};
+					$curr_ref->{"chrEnd"}=$hash_ref->{"chrEnd"};
 				}
 				else{
 					#deal with overlap
-					my $overlap = $curr_ref{"repEnd"}-$hash_ref{"repStart"}+1;
-					my $curr_chrSeq = substr($curr_ref{"chrSeq"},0,0-$overlap);
-					my $hash_chrSeq = substr($hash_ref{"chrSeq"},$overlap);
-					my $curr_repSeq = substr($curr_ref{"repSeq"},0,0-$overlap);
-					my $hash_repSeq = substr($hash_ref{"repSeq"},$overlap);
-					my $tempseq1 = substr($curr_ref{"chrSeq"},0-$overlap);
-					my $tempseq2 = substr($hash_ref{"chrSeq"},0,$overlap);
-					my $consensus = substr($hash_ref{"repSeq"},0,$overlap);
+					#print Dumper($curr_ref);
+					#print "\ncurr and browsing\m";
+					#print Dumper($hash_ref);
+					my $overlap = $curr_ref->{"repEnd"}-$hash_ref->{"repStart"}+1;
+					#print "the overlap is $overlap\n";
+					my $curr_chrSeq = substr($curr_ref->{"chrSeq"},0,0-$overlap);
+					my $hash_chrSeq = substr($hash_ref->{"chrSeq"},$overlap);
+					my $curr_repSeq = substr($curr_ref->{"repSeq"},0,0-$overlap);
+					my $hash_repSeq = substr($hash_ref->{"repSeq"},$overlap);
+					my $tempseq1 = substr($curr_ref->{"chrSeq"},0-$overlap);
+					my $tempseq2 = substr($hash_ref->{"chrSeq"},0,$overlap);
+					my $consensus = substr($hash_ref->{"repSeq"},0,$overlap);
 					my $overseq = "";
-					for(my $i=0;$i++,$i<length($consensus)){
-						my $nt = substr($tempseq1,$i,1) eq $substr($tempseq2,$i,1)?substr($tempseq1,$i,1):substr($consensus,$i,1);
-						substr($overlap,length($overlap))=$nt;
+					#print "$curr_chrSeq\n$tempseq1\n$tempseq2\n$consensus\n$hash_chrSeq\n\n";
+					for(my $i=0;$i<length($consensus);$i++){
+						my $nt = substr($tempseq1,$i,1) eq substr($tempseq2,$i,1)?substr($tempseq1,$i,1):substr($consensus,$i,1);
+						$overseq=$overseq.$nt;
 					}
-					$curr_ref{"chrSeq"} = $curr_chrSeq.$overseq.$hash_chrSeq;
-					$curr_ref{"repSeq"} = $curr_repSeq.$overseq.$hash_repSeq;
+					$curr_ref->{"chrSeq"} = $curr_chrSeq.$overseq.$hash_chrSeq;
+					$curr_ref->{"repSeq"} = $curr_repSeq.$overseq.$hash_repSeq;
+					$curr_ref->{"repEnd"} = $hash_ref->{"repEnd"};
+					$curr_ref->{"repLeft"} = $hash_ref->{"repLeft"};
+					$curr_ref->{"chrEnd"}=$hash_ref->{"chrEnd"};
 				}
 			}
 			else{
-				$curr_ref{"repStart"} = $hash_ref{"repStart"};
-				if($hash_ref{"repEnd"}<$curr_ref{"repStart"}){
-					$curr_ref{"chrSeq"} = $hash_ref{"chrSeq"}."-"x($curr_ref{"repStart"}-$hash_ref{"repEnd"}-1).$curr_ref{"chrSeq"};
-					$curr_ref{"repSeq"} = $hash_ref{"repSeq"}."-"x($curr_ref{"repStart"}-$hash_ref{"repEnd"}-1).$curr_ref{"repSeq"};
+				if($hash_ref->{"repEnd"}<$curr_ref->{"repStart"}){
+					$curr_ref->{"chrSeq"} = $hash_ref->{"chrSeq"}."-"x($curr_ref->{"repStart"}-$hash_ref->{"repEnd"}-1).$curr_ref->{"chrSeq"};
+					$curr_ref->{"repSeq"} = $hash_ref->{"repSeq"}."-"x($curr_ref->{"repStart"}-$hash_ref->{"repEnd"}-1).$curr_ref->{"repSeq"};
+					$curr_ref->{"chrEnd"}=$hash_ref->{"chrEnd"};
+					$curr_ref->{"repStart"} = $hash_ref->{"repStart"};
 				}
 				else{
 					#deal with overlap
-					my $overlap = $hash_ref{"repEnd"}-$curr_ref{"repStart"}+1;
-					my $curr_chrSeq = substr($curr_ref{"chrSeq"},$overlap);
-					my $hash_chrSeq = substr($hash_ref{"chrSeq"},0,0-$overlap);
-					my $curr_repSeq = substr($curr_ref{"repSeq"},$overlap);
-					my $hash_repSeq = substr($hash_ref{"repSeq"},0,0-$overlap);
-					my $tempseq1 = substr($curr_ref{"chrSeq"},0,$overlap);
-					my $tempseq2 = substr($hash_ref{"chrSeq"},0-$overlap);
-					my $consensus = substr($hash_ref{"repSeq"},0-$overlap);
+					my $overlap = $hash_ref->{"repEnd"}-$curr_ref->{"repStart"}+1;
+					my $curr_chrSeq = substr($curr_ref->{"chrSeq"},$overlap);
+					my $hash_chrSeq = substr($hash_ref->{"chrSeq"},0,0-$overlap);
+					my $curr_repSeq = substr($curr_ref->{"repSeq"},$overlap);
+					my $hash_repSeq = substr($hash_ref->{"repSeq"},0,0-$overlap);
+					my $tempseq1 = substr($curr_ref->{"chrSeq"},0,$overlap);
+					my $tempseq2 = substr($hash_ref->{"chrSeq"},0-$overlap);
+					my $consensus = substr($hash_ref->{"repSeq"},0-$overlap);
 					my $overseq = "";
-					for(my $i=0;$i++,$i<length($consensus)){
-						my $nt = substr($tempseq1,$i,1) eq $substr($tempseq2,$i,1)?substr($tempseq1,$i,1):substr($consensus,$i,1);
-						substr($overlap,length($overlap))=$nt;
+					for(my $i=0;$i<length($consensus);$i++){
+						my $nt = substr($tempseq1,$i,1) eq substr($tempseq2,$i,1)?substr($tempseq1,$i,1):substr($consensus,$i,1);
+						$overseq=$overseq.$nt;
 					}
-					$curr_ref{"chrSeq"} = $hash_chrSeq.$overseq.$curr_chrSeq;
-					$curr_ref{"repSeq"} = $hash_repSeq.$overseq.$curr_repSeq;
+					$curr_ref->{"chrSeq"} = $hash_chrSeq.$overseq.$curr_chrSeq;
+					$curr_ref->{"repSeq"} = $hash_repSeq.$overseq.$curr_repSeq;
+					$curr_ref->{"chrEnd"}=$hash_ref->{"chrEnd"};
+					$curr_ref->{"repStart"} = $hash_ref->{"repStart"};
 				}
 			}
 		}
 		else{
-			#assign new bio::seq to alignemnt
-			my $chrSeq = "-"x($curr_ref{"repStart"}-1).$curr_ref{"chrSeq"}."-"x($curr_ref{"repLeft"});
-#			print "$headline\n$chrSeq\n";
-			my $tempSeq = Bio::LocatableSeq->new(-seq => $chrSeq,
-								-id => $curr_ref{"chr"}."_$curr_ref{"chrStart"}"."-$curr_ref{"chrEnd"}$curr_ref{"strand"}",
-								-alphabet => "dna",
-							);
-			#add the chrSeq with insertions deleted to the MSA:
-			if (exists $alnHash{$te}){
-				$alnHash{$te}->add_seq($tempSeq);
+			unless (((defined $maxStart) && ($curr_ref->{"repStart"} > $maxStart)) || ((defined $maxLeft) && ($curr_ref->{"repLeft"} > $maxLeft))){ #filter out maxstart and maxend parameter
+				#print "$curr_ref->{'chr'}\t$curr_ref->{'chrStart'}\t$curr_ref->{'chrEnd'}\t$curr_ref->{'strand'}\nstart is $curr_ref->{'repStart'}\nend is $curr_ref->{'repLeft'}\n\n";
+				#assign new bio::seq to alignemnt
+				my $chrSeq = "-"x($curr_ref->{"repStart"}-1).$curr_ref->{"chrSeq"}."-"x($curr_ref->{"repLeft"});
+#				print "$headline\n$chrSeq\n";
+				my $tempSeq = Bio::LocatableSeq->new(-seq => $chrSeq,
+									-id => $curr_ref->{"chr"}."_".$curr_ref->{"chrStart"}."-".$curr_ref->{"chrEnd"}.$curr_ref->{"strand"},
+									-alphabet => "dna",
+								);
+				#add the chrSeq with insertions deleted to the MSA:
+				if (exists $alnHash{$te}){
+					$alnHash{$te}->add_seq($tempSeq);
+				}
+				else{
+					my $tempAln = Bio::SimpleAlign->new(-seqs => [$tempSeq]);
+					$alnHash{$te} = $tempAln;
+				}
 			}
 			else{
-				my $tempAln = Bio::SimpleAlign->new(-seqs => [$tempSeq]);
-				$alnHash{$te} = $tempAln;
+				#print "not included:\n$curr_ref->{'chr'}\t$curr_ref->{'chrStart'}\t$curr_ref->{'chrEnd'}\t$curr_ref->{'strand'}\nstart is $curr_ref->{'repStart'}\nend is $curr_ref->{'repLeft'}\n\n";
 			}
 			$curr_ref = $hash_ref;
 		}
+	}
+	unless (((defined $maxStart) && ($curr_ref->{"repStart"} > $maxStart)) || ((defined $maxLeft) && ($curr_ref->{"repLeft"} > $maxLeft))){ #filter out maxstart and maxend parameter
+		#print "the last record!!!\n";
+		#print "$curr_ref->{'chr'}\t$curr_ref->{'chrStart'}\t$curr_ref->{'chrEnd'}\t$curr_ref->{'strand'}\nstart is $curr_ref->{'repStart'}\nend is $curr_ref->{'repLeft'}\n\n";
+		
 		#assign last bio::seq to alignemnt
-		my $chrSeq = "-"x($curr_ref{"repStart"}-1).$curr_ref{"chrSeq"}."-"x($curr_ref{"repLeft"});
+		my $chrSeq = "-"x($curr_ref->{"repStart"}-1).$curr_ref->{"chrSeq"}."-"x($curr_ref->{"repLeft"});
 #		print "$headline\n$chrSeq\n";
 		my $tempSeq = Bio::LocatableSeq->new(-seq => $chrSeq,
-							-id => $curr_ref{"chr"}."_$curr_ref{"chrStart"}"."-$curr_ref{"chrEnd"}$curr_ref{"strand"}",
+							-id => $curr_ref->{"chr"}."_".$curr_ref->{"chrStart"}."-".$curr_ref->{"chrEnd"}.$curr_ref->{"strand"},
 							-alphabet => "dna",
 						);
 		#add the chrSeq with insertions deleted to the MSA:
@@ -371,37 +398,22 @@ while (my ($te, $array_ref) = each(%repHash)){
 			$alnHash{$te} = $tempAln;
 		}
 	}
-
+	else {
+		#print "the last record not included!!!\n";
+		#print "not included:\n$curr_ref->{'chr'}\t$curr_ref->{'chrStart'}\t$curr_ref->{'chrEnd'}\t$curr_ref->{'strand'}\nstart is $curr_ref->{'repStart'}\nend is $curr_ref->{'repLeft'}\n\n";
+	}
+#	$pm1->finish;
 }
-undef $repHash;
+#$pm1->wait_all_children;
+undef %repHash;
 	
-
-
-#		$chrSeq = "-"x($repStart-1).$chrSeq."-"x($repLeft);
-##		print "$headline\n$chrSeq\n";
-#		my $tempSeq = Bio::LocatableSeq->new(-seq => $chrSeq,
-#							-id => "$genoName"."_$genoStart"."-$genoEnd$strand",
-#							#	-start => $repStart,
-#							#	-end => $repEnd,
-#							-alphabet => "dna",
-#						);
-#		#add the chrSeq with insertions deleted to the MSA:
-#		if (exists $repHash{$repName}){
-#			$repHash{$repName}->add_seq($tempSeq);
-#		}
-#		else{
-#			my $tempAln = Bio::SimpleAlign->new(-seqs => [$tempSeq]);
-#			$repHash{$repName} = $tempAln;
-#		}
-
-
-
+print "alignment done!\n";
 #open the outfile
 my $outFile;
 #my @outFile  : shared;
 my $newFasta;
 #my @newFasta : shared;
-my $pm = Parallel::ForkManager->new($cpus);
+
 #parse alnHash to regenerate consensus for all repeats:
 
 
@@ -422,8 +434,9 @@ if ($purpose eq "con" || $purpose eq "aln" || $purpose eq "all"){
 }
 
 
+my $pm2 = Parallel::ForkManager->new($cpus);
 while (my ($te, $msa) = each(%alnHash)){
-	my $pid = $pm->start and next;
+	my $pid = $pm2->start and next;
 	print "working on $te:\n";
 	unless ($msa->is_flush){ # quit and print error message if not all seqs in alignment have same length.
 		foreach my $seq_obj($msa->each_seq){
@@ -455,7 +468,7 @@ while (my ($te, $msa) = each(%alnHash)){
 #			push (@newFasta, [$temp_id,$temp_seq]);
 		}
 	}
-	$pm->finish if $copies == 1;
+	$pm2->finish if $copies == 1;
 	if ($purpose eq "CG" || $purpose eq "all"){
 		my $numCpG = 0; #number of all CpG sites in repSeq
 		my $mutTpG = 0; #number of mutated CpG to TpG
@@ -501,10 +514,10 @@ while (my ($te, $msa) = each(%alnHash)){
 #		push (@outFile, "$te\t$copies\t$numC\t$mutC\t$numG\t$mutG\t$numCpG\t$mutTpG\t$mutCpA"); 
 	}
 	print "$te analysis done!!!\n";
-	$pm->finish;
+	$pm2->finish;
 }
 
-$pm->wait_all_children;
+$pm2->wait_all_children;
 print "all threads done!!!\n\n";
 if ($purpose eq "CG" || $purpose eq "all"){
 #	open $outFile, ">$outName";
