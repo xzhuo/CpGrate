@@ -250,6 +250,7 @@ for(my $i = 0; $i<= $#alignArray;$i++){
 		my @descending_gaps = sort { $b<=>$a } @$gaps_ref;
 		foreach my $gap(@descending_gaps){
 			substr($chrSeq, $gap-1, 1) = "";
+			substr($repSeq, $gap-1, 1) = "";
 		}
 		$chrSeq =~ s/[^ATGC]/-/g;
 		$repSeq =~ s/[^ATGC]/-/g;
@@ -295,22 +296,28 @@ while (my ($te, $array_ref) = each(%repHash)){
 					$curr_ref->{"repSeq"} = $curr_ref->{"repSeq"}."-"x($hash_ref->{"repStart"}-$curr_ref->{"repEnd"}-1).$hash_ref->{"repSeq"};
 					$curr_ref->{"repEnd"} = $hash_ref->{"repEnd"};
 					$curr_ref->{"repLeft"} = $hash_ref->{"repLeft"};
-					$curr_ref->{"chrEnd"}=$hash_ref->{"chrEnd"};
+					$curr_ref->{"chrEnd"} = $hash_ref->{"chrEnd"};
 				}
 				else{
 					#deal with overlap
-					#print Dumper($curr_ref);
-					#print "\ncurr and browsing\m";
-					#print Dumper($hash_ref);
-					my $overlap = $curr_ref->{"repEnd"}-$hash_ref->{"repStart"}+1;
-					#print "the overlap is $overlap\n";
-					my $curr_chrSeq = substr($curr_ref->{"chrSeq"},0,0-$overlap);
-					my $hash_chrSeq = substr($hash_ref->{"chrSeq"},$overlap);
-					my $curr_repSeq = substr($curr_ref->{"repSeq"},0,0-$overlap);
-					my $hash_repSeq = substr($hash_ref->{"repSeq"},$overlap);
-					my $tempseq1 = substr($curr_ref->{"chrSeq"},0-$overlap);
-					my $tempseq2 = substr($hash_ref->{"chrSeq"},0,$overlap);
-					my $consensus = substr($hash_ref->{"repSeq"},0,$overlap);
+					my $hash_overlap = $hash_ref->{"repEnd"}-$hash_ref->{"repStart"}+1;
+					my $curr_overlap = $curr_ref->{"repEnd"}-$hash_ref->{"repStart"}+1;
+					my $min_overlap = $hash_overlap<$curr_overlap?$hash_overlap:$curr_overlap;
+					my $curr_chrSeq = substr($curr_ref->{"chrSeq"},0,0-$curr_overlap);
+					my $curr_repSeq = substr($curr_ref->{"repSeq"},0,0-$curr_overlap);
+					my $hash_chrSeq;
+					my $hash_repSeq;
+					if ($min_overlap == $curr_overlap){
+						$hash_chrSeq = substr($hash_ref->{"chrSeq"},$min_overlap);
+						$hash_repSeq = substr($hash_ref->{"repSeq"},$min_overlap);
+					}
+					else{
+						$hash_chrSeq = substr($curr_ref->{"chrSeq"},$min_overlap-$curr_overlap);
+						$hash_repSeq = substr($curr_ref->{"repSeq"},$min_overlap-$curr_overlap);
+					}
+					my $tempseq1 = substr($curr_ref->{"chrSeq"},0-$curr_overlap,$min_overlap);
+					my $tempseq2 = substr($hash_ref->{"chrSeq"},0,$min_overlap);
+					my $consensus = substr($hash_ref->{"repSeq"},0,$min_overlap);
 					my $overseq = "";
 					#print "$curr_chrSeq\n$tempseq1\n$tempseq2\n$consensus\n$hash_chrSeq\n\n";
 					for(my $i=0;$i<length($consensus);$i++){
@@ -319,28 +326,40 @@ while (my ($te, $array_ref) = each(%repHash)){
 					}
 					$curr_ref->{"chrSeq"} = $curr_chrSeq.$overseq.$hash_chrSeq;
 					$curr_ref->{"repSeq"} = $curr_repSeq.$overseq.$hash_repSeq;
-					$curr_ref->{"repEnd"} = $hash_ref->{"repEnd"};
-					$curr_ref->{"repLeft"} = $hash_ref->{"repLeft"};
-					$curr_ref->{"chrEnd"}=$hash_ref->{"chrEnd"};
+					if ($curr_ref->{"repEnd"} <= $hash_ref->{"repEnd"}){
+						$curr_ref->{"repEnd"} = $hash_ref->{"repEnd"};
+						$curr_ref->{"repLeft"} = $hash_ref->{"repLeft"};
+					}
+					$curr_ref->{"chrEnd"} = $hash_ref->{"chrEnd"} if $hash_ref->{"chrEnd"} > $curr_ref->{"chrEnd"};
 				}
 			}
 			else{
 				if($hash_ref->{"repEnd"}<$curr_ref->{"repStart"}){
 					$curr_ref->{"chrSeq"} = $hash_ref->{"chrSeq"}."-"x($curr_ref->{"repStart"}-$hash_ref->{"repEnd"}-1).$curr_ref->{"chrSeq"};
 					$curr_ref->{"repSeq"} = $hash_ref->{"repSeq"}."-"x($curr_ref->{"repStart"}-$hash_ref->{"repEnd"}-1).$curr_ref->{"repSeq"};
-					$curr_ref->{"chrEnd"}=$hash_ref->{"chrEnd"};
+					$curr_ref->{"chrEnd"} = $hash_ref->{"chrEnd"};
 					$curr_ref->{"repStart"} = $hash_ref->{"repStart"};
 				}
 				else{
 					#deal with overlap
-					my $overlap = $hash_ref->{"repEnd"}-$curr_ref->{"repStart"}+1;
-					my $curr_chrSeq = substr($curr_ref->{"chrSeq"},$overlap);
-					my $hash_chrSeq = substr($hash_ref->{"chrSeq"},0,0-$overlap);
-					my $curr_repSeq = substr($curr_ref->{"repSeq"},$overlap);
-					my $hash_repSeq = substr($hash_ref->{"repSeq"},0,0-$overlap);
-					my $tempseq1 = substr($curr_ref->{"chrSeq"},0,$overlap);
-					my $tempseq2 = substr($hash_ref->{"chrSeq"},0-$overlap);
-					my $consensus = substr($hash_ref->{"repSeq"},0-$overlap);
+					my $hash_overlap = $hash_ref->{"repEnd"}-$hash_ref->{"repStart"}+1;
+					my $curr_overlap = $hash_ref->{"repEnd"}-$curr_ref->{"repStart"}+1;
+					my $min_overlap = $hash_overlap<$curr_overlap?$hash_overlap:$curr_overlap;
+					my $curr_chrSeq = substr($curr_ref->{"chrSeq"},$curr_overlap);
+					my $curr_repSeq = substr($curr_ref->{"repSeq"},$curr_overlap);
+					my $hash_chrSeq;
+					my $hash_repSeq;
+					if($min_overlap == $curr_overlap){
+						$hash_chrSeq = substr($hash_ref->{"chrSeq"},0,0-$curr_overlap);
+						$hash_repSeq = substr($hash_ref->{"repSeq"},0,0-$curr_overlap);
+					}
+					else{
+						$hash_chrSeq = substr($curr_ref->{"chrSeq"},0,$curr_overlap-$min_overlap);
+						$hash_repSeq = substr($curr_ref->{"repSeq"},0,$curr_overlap-$min_overlap);
+					}
+					my $tempseq1 = substr($curr_ref->{"chrSeq"},$curr_overlap-$min_overlap,$min_overlap);
+					my $tempseq2 = substr($hash_ref->{"chrSeq"},0-$min_overlap);
+					my $consensus = substr($hash_ref->{"repSeq"},0-$min_overlap);
 					my $overseq = "";
 					for(my $i=0;$i<length($consensus);$i++){
 						my $nt = substr($tempseq1,$i,1) eq substr($tempseq2,$i,1)?substr($tempseq1,$i,1):substr($consensus,$i,1);
@@ -348,8 +367,10 @@ while (my ($te, $array_ref) = each(%repHash)){
 					}
 					$curr_ref->{"chrSeq"} = $hash_chrSeq.$overseq.$curr_chrSeq;
 					$curr_ref->{"repSeq"} = $hash_repSeq.$overseq.$curr_repSeq;
-					$curr_ref->{"chrEnd"}=$hash_ref->{"chrEnd"};
-					$curr_ref->{"repStart"} = $hash_ref->{"repStart"};
+					if($curr_ref->{"repStart"} >= $hash_ref->{"repStart"}){
+						$curr_ref->{"repStart"} = $hash_ref->{"repStart"};
+					}
+					$curr_ref->{"chrEnd"} = $hash_ref->{"chrEnd"} if $hash_ref->{"chrEnd"} > $curr_ref->{"chrEnd"};
 				}
 			}
 		}
