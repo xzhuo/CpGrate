@@ -8,7 +8,7 @@ modified from John Pace's script.
 
 =head2 USAGE
 
-perl genomeRM_CpG.pl -a <RM align file> [-m <c|a>] [-p <con|CG|aln|all>] [-c <class name>] [-r <repeat name>] [-s <INT> -l <INT>] [-h help]
+perl genomeRM_CpG.pl -a <RM align file> [-m <c|a>] [-p <con|CG|aln|all>] [-c <class name>] [-r <repeat name>] [-s <INT> -l <INT>] [-b <INT>] [-h help]
 
 options:
 -a the repeatmasker alignment file.
@@ -33,10 +33,13 @@ maxstart. int. Only repeats with repstart <= maxstart are used for consensus reg
 -l
 maxleft. int. Only repeats with repleft <= maxleft are used for consensus regeneration. Work together with -s to defined complete TE. Recommend 50.
 
+-b
+minlength. int. only repeats with sequence length >= minlength are used for consensus regeneration. Recommend 100.
+
 -u
 number of processes in multithreads.
 
-ps: if -s and -l are not defined, any fragment matches particular TE would be included in the alignment for calculation.
+ps: if -s, -l and -b are not defined, any fragment matches particular TE would be included in the alignment for calculation.
 
 -h
 help
@@ -64,8 +67,8 @@ STDERR->autoflush(1);
 STDOUT->autoflush(1);
 
 my %opts=();
-getopts("ha:m:p:c:r:s:l:u:", \%opts);
-my $usage = "perl ParseRMalign_regenerate_consensus.pl -a <RM align file> [-m <c|a>] [-p <con|CG|aln|all>] [-c <class name>] [-r <repeat name>] [-s <INT> -l <INT>] [-u <INT>]";
+getopts("ha:m:p:c:r:s:l:b:u:", \%opts);
+my $usage = "perl ParseRMalign_regenerate_consensus.pl -a <RM align file> [-m <c|a>] [-p <con|CG|aln|all>] [-c <class name>] [-r <repeat name>] [-s <INT> -l <INT>] [-b <INT>] [-u <INT>]";
 die "$usage" if $opts{h};
 my $fileName = $opts{a} or die "$usage";
 $opts{p} ||= "con"; #set default parameter for p: only output consensus.
@@ -87,7 +90,7 @@ if (defined $opts{s} && defined $opts{l}){
 elsif (defined $opts{s} || defined $opts{l}){
 	die "$usage";
 }
-
+my $minlength = $opts{b};
 my @alignArray = ();
 print "Reading and processing ".$fileName."\n";
 
@@ -95,11 +98,12 @@ print "Reading and processing ".$fileName."\n";
 open my $alignfile, "<$fileName";
 my $outName;
 my $outFasta;
-if (defined $targetClass || defined $targetRepeat || defined $maxStart || defined $maxLeft){
+if (defined $targetClass || defined $targetRepeat || defined $maxStart || defined $maxLeft || defined $minlength){
 	my $target = "";
 	$target = $target.$targetClass if defined $targetClass;
 	$target = $target.$targetRepeat if defined $targetRepeat;
 	$target = $target.".$maxStart-$maxLeft" if defined $maxStart && defined $maxLeft;
+	$target = $target.".$minlength" if defined $minlength;
 	$outName = "$fileName.$target.CpG.out";
 	$outFasta = "$fileName.$target.new_consensus.fa";
 }
@@ -375,7 +379,7 @@ while (my ($te, $array_ref) = each(%repHash)){
 			}
 		}
 		else{
-			unless (((defined $maxStart) && ($curr_ref->{"repStart"} > $maxStart)) || ((defined $maxLeft) && ($curr_ref->{"repLeft"} > $maxLeft))){ #filter out maxstart and maxend parameter
+			unless (((defined $maxStart) && ($curr_ref->{"repStart"} > $maxStart)) || ((defined $maxLeft) && ($curr_ref->{"repLeft"} > $maxLeft)) || ((defined $minlength) && ($curr_ref->{"chrEnd"} - $curr_ref->{"chrStart"} + 1 < $minlength))){ #filter out maxstart, maxend and minlength parameter
 				#print "$curr_ref->{'chr'}\t$curr_ref->{'chrStart'}\t$curr_ref->{'chrEnd'}\t$curr_ref->{'strand'}\nstart is $curr_ref->{'repStart'}\nend is $curr_ref->{'repLeft'}\n\n";
 				#assign new bio::seq to alignemnt
 				my $chrSeq = "-"x($curr_ref->{"repStart"}-1).$curr_ref->{"chrSeq"}."-"x($curr_ref->{"repLeft"});
@@ -399,7 +403,7 @@ while (my ($te, $array_ref) = each(%repHash)){
 			$curr_ref = $hash_ref;
 		}
 	}
-	unless (((defined $maxStart) && ($curr_ref->{"repStart"} > $maxStart)) || ((defined $maxLeft) && ($curr_ref->{"repLeft"} > $maxLeft))){ #filter out maxstart and maxend parameter
+	unless (((defined $maxStart) && ($curr_ref->{"repStart"} > $maxStart)) || ((defined $maxLeft) && ($curr_ref->{"repLeft"} > $maxLeft)) || ((defined $minlength) && ($curr_ref->{"chrEnd"} - $curr_ref->{"chrStart"} + 1 < $minlength))){ #filter out maxstart, maxend and minlength parameter
 		#print "the last record!!!\n";
 		#print "$curr_ref->{'chr'}\t$curr_ref->{'chrStart'}\t$curr_ref->{'chrEnd'}\t$curr_ref->{'strand'}\nstart is $curr_ref->{'repStart'}\nend is $curr_ref->{'repLeft'}\n\n";
 		
