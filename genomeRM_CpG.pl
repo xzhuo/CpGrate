@@ -60,7 +60,7 @@ use Bio::AlignIO;
 use File::Temp qw/ tempfile/;
 use Fcntl qw(:flock SEEK_END);
 use IO::Handle;
-
+use Statistics::Basic qw(:all);
 use Data::Dumper;
 
 STDERR->autoflush(1);
@@ -444,7 +444,7 @@ my $newFasta;
 
 if ($purpose eq "CG" || $purpose eq "all"){
 	open $outFile, ">$outName";
-	print $outFile "te\tcopies\tnumC\tmutC\tnumG\tmutG\tnumCpG\tmutTpG\tmutCpA\n";
+	print $outFile "te\tcopies\tnumC\tmutC\tnumG\tmutG\tnumCpG\tmutTpG\tmutCpA\tlength\n";
 #	foreach (@outFile){
 #		print $outFile "$_\n";
 #	}
@@ -464,13 +464,21 @@ while (my ($te, $msa) = each(%alnHash)){
 	my $pid = $pm2->start and next;
 	print "working on $te:\n";
 	unless ($msa->is_flush){ # quit and print error message if not all seqs in alignment have same length.
-		foreach my $seq_obj($msa->each_seq){
-			print STDERR "$te\t".$seq_obj->display_id()."\t";
-			print STDERR $seq_obj->length()."\n";
-			print STDERR $seq_obj->seq()."\n";
-		}
 		print "$te alignment is not flush!!\n";
-		die "$te alignment is not flush!!\n";
+		my @all_length = ();
+		foreach my $seq_obj($msa->each_seq){
+			push @all_length, $seq_obj->length();
+		}
+		my $median = median(@all_length);
+		foreach my $seqobj($msa->each_seq){
+			unless ($seqobj->length() == $median){
+				print STDERR "removed seq: $te\t".$seqobj->display_id()."\t";
+				print STDERR $seqobj->length()."\n";
+				print STDERR $seqobj->seq()."\n";
+				$msa->remove_seq($seqobj);
+			}
+		}
+		#die "$te alignment is not flush!!\n";
 	}
 	my $consensus = $msa->consensus_string();
 	my $consensus_obj = Bio::LocatableSeq->new(-seq => $consensus,
@@ -478,6 +486,7 @@ while (my ($te, $msa) = each(%alnHash)){
 						-alphabet => "dna",
 					);
 	my $copies = $msa->num_sequences();
+	my $length = $msa->length();
 	flock $newFasta, LOCK_EX or die "can't lock!!" if $purpose eq "con" || $purpose eq "all";
 	print $newFasta ">$te\n$consensus\n" if $purpose eq "con" || $purpose eq "all";
 	flock $newFasta, LOCK_UN or die "can't unlock!!" if $purpose eq "con" || $purpose eq "all";
@@ -534,7 +543,7 @@ while (my ($te, $msa) = each(%alnHash)){
 			unlink($fasta);
 		}
 		flock $outFile, LOCK_EX or die "can't lock!!";
-		print $outFile "$te\t$copies\t$numC\t$mutC\t$numG\t$mutG\t$numCpG\t$mutTpG\t$mutCpA\n";
+		print $outFile "$te\t$copies\t$numC\t$mutC\t$numG\t$mutG\t$numCpG\t$mutTpG\t$mutCpA\t$length\n";
 		flock $outFile, LOCK_UN or die "can't unlock!!";
 #		push (@outFile, "$te\t$copies\t$numC\t$mutC\t$numG\t$mutG\t$numCpG\t$mutTpG\t$mutCpA"); 
 	}
