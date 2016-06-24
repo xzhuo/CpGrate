@@ -70,6 +70,7 @@ my %opts=();
 getopts("ha:m:p:c:r:s:l:b:u:", \%opts);
 my $usage = "perl ParseRMalign_regenerate_consensus.pl -a <RM align file> [-m <c|a>] [-p <con|CG|aln|all>] [-c <class name>] [-r <repeat name>] [-s <INT> -l <INT>] [-b <INT>] [-u <INT>]";
 die "$usage" if $opts{h};
+
 my $fileName = $opts{a} or die "$usage";
 $opts{p} ||= "con"; #set default parameter for p: only output consensus.
 die "$usage" unless $opts{p} eq "con" || $opts{p} eq "CG" || $opts{p} eq "all" || $opts{p} eq "aln";
@@ -106,10 +107,14 @@ if (defined $targetClass || defined $targetRepeat || defined $maxStart || define
 	$target = $target.".$minlength" if defined $minlength;
 	$outName = "$fileName.$target.CpG.out";
 	$outFasta = "$fileName.$target.new_consensus.fa";
+#	$outName = "fAlb15.$target.CpG.out";
+#	$outFasta = "fAlb15.$target.new_consensus.fa";
 }
 else{
 	$outName = "$fileName.CpG.out";
 	$outFasta = "$fileName.new_consensus.fa";
+#	$outName = "fAlb15.CpG.out";
+#	$outFasta = "fAlb15.new_consensus.fa";
 }
 
 #Put the lines from the file into an array, but only the ones that aren't just returns or the tv/ts line
