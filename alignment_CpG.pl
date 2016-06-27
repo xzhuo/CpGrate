@@ -36,7 +36,7 @@ my $fasta = $opts{f} or die "$usage";
 
 $opts{m} ||= "c"; #set default model as consensus
 die "$usage" unless $opts{m} eq "c" || $opts{m} eq "a";
-my $model = $pots{m};
+my $model = $opts{m};
 
 if ($model eq 'c'){
 	my $str = Bio::AlignIO->new(-file => $fasta,
