@@ -408,4 +408,18 @@ sub renamefasta{
 	}
 	return(\%namehash);
 }
+
+sub pairwise_identity{
+	#This sub is used to varify the pairwise identity between rep_seq and chr_seq. So I can make sure the alignment is correct before add it to the MSA.
+	my $seq1 = shift;
+	my $seq2 = shift;
+	die "unequal sequence length!\n\n" unless length($seq1) == length($seq2);
+	my $length = length($seq1);
+	my $identity = 0;
+	for my $pos (0..$length-1){
+		$identity++ if substr($seq1,$pos,1) eq substr($seq2,$pos,1);
+	}
+	my $percent_identity = 100*$identity/$length;
+	return $percent_identity;
+}
 1;

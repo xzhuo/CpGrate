@@ -259,6 +259,7 @@ for(my $i = 0; $i<= $#alignArray;$i++){
 		$chrSeq =~ s/[^ATGC]/-/g;
 		$repSeq =~ s/[^ATGC]/-/g;
 		next if $chrSeq eq ""; #remove suspicious sequences (I don't know why they are in the alignment in the first place. but the fact that they have different seq length causes a problem for MSA building).
+		next if pairwise_identity($chrSeq,$repSeq) > 40;
 
 		my $seq_hash_ref = { "chrSeq" => $chrSeq,
 					"repSeq" => $repSeq,
