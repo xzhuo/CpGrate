@@ -54,6 +54,7 @@ use warnings;
 use strict;
 use Func;
 use Getopt::Std;
+use Bio::SeqIO;
 use Bio::SimpleAlign;
 use Bio::LocatableSeq;
 use Bio::AlignIO;
@@ -67,8 +68,8 @@ STDERR->autoflush(1);
 STDOUT->autoflush(1);
 
 my %opts=();
-getopts("ha:m:p:c:r:s:l:b:u:", \%opts);
-my $usage = "perl ParseRMalign_regenerate_consensus.pl -a <RM align file> [-m <c|a>] [-p <con|CG|aln|all>] [-c <class name>] [-r <repeat name>] [-s <INT> -l <INT>] [-b <INT>] [-u <INT>]";
+getopts("ha:m:p:c:r:s:l:b:d:u:", \%opts);
+my $usage = "perl ParseRMalign_regenerate_consensus.pl -a <RM align file> [-m <c|a>] [-p <con|CG|aln|all>] [-c <class name>] [-r <repeat name>] [-s <INT> -l <INT>] [-b <INT>] [-d <replibrary name>] [-u <INT>]";
 die "$usage" if $opts{h};
 
 my $fileName = $opts{a} or die "$usage";
@@ -93,6 +94,31 @@ elsif (defined $opts{s} || defined $opts{l}){
 }
 my $minlength = $opts{b};
 my @alignArray = ();
+
+my $db;
+my $replib;
+if (defined $opts{d}){
+	print "reading and loading repeat library\n";
+	#convert embl file to fasta file
+	use File::Temp qw/ tempfile /;
+	my ($fh, $tempfasta) = tempfile();
+	my $replib = $opts{d};
+	my $embl = Bio::SeqIO->new(-file => $replib,
+					-format => 'EMBL',
+				);
+	my $fasta = Bio::SeqIO->new(-fh => $fh,
+					-format => 'Fasta',
+				);
+	while (my $seq = $in->next_seq()){
+		$out->write_seq($seq);
+	}
+
+	#build db::fasta
+	$db = Bio::DB::Fasta->new($tempfasta);
+	print "tempfasta: $tempfasta\n"; #for debug
+	print "repeat library loaded!\n";
+}
+
 print "Reading and processing ".$fileName."\n";
 
 #Open the align file
@@ -264,7 +290,7 @@ for(my $i = 0; $i<= $#alignArray;$i++){
 		$chrSeq =~ s/[^ATGC]/-/g;
 		$repSeq =~ s/[^ATGC]/-/g;
 		next if $chrSeq eq ""; #remove suspicious sequences (I don't know why they are in the alignment in the first place. but the fact that they have different seq length causes a problem for MSA building).
-		next if Func::pairwise_identity($chrSeq,$repSeq) > 40;
+		#next if Func::pairwise_identity($chrSeq,$repSeq) > 40;
 
 		my $seq_hash_ref = { "chrSeq" => $chrSeq,
 					"repSeq" => $repSeq,
@@ -294,10 +320,37 @@ while (my ($te, $array_ref) = each(%repHash)){
 	print "te name is $te\n\n";
 	@$array_ref = sort {$a->{"chr"} cmp $b->{"chr"} or $a->{"chrStart"} <=> $b->{"chrStart"} or $a->{"chrEnd"} <=> $b->{"chrEnd"}} @$array_ref; 
 	my $curr_ref;
+	my $repfull;
+	if (defined $opts{d}){
+		$repfull = $db->get_Seq_by_id($te);
+	}
 	foreach my $hash_ref(@$array_ref){
+		
+		#next correct repStart and repEnd if they are wrong:
+		if (defined $opts{d}){
+			my $seqaln = $hash_ref->{"repSeq"};
+			my $tempStart = $hash_ref->{"repStart"};
+			my $tempEnd = $hash_ref->{"repEnd"};
+			my $seqpos = $repfull->subseq($tempStart,$tempEnd);
+			unless ($seqaln eq $seqpos){
+				print "hmm, something wrong with the alignment!\n";
+				my $tmpCheck = 0;
+				for my $diff(-1,-2,1,2){
+					$seqpos = $repfull->subseq($tempStart + $diff,$tempEnd + $diff);
+					if ($seqaln eq $seqpos){
+						$hash_ref->{"repStart"} = $tempStart + $diff;
+						$hash_ref->{"repEnd"} = $tempEnd + $diff;
+						$tmpCheck = 1;	#swtich it!
+					}
+				}
+				die "wrong alignment somehow!" unless $tempCheck;
+			}
+		}
+
 		unless (defined $curr_ref){
 			$curr_ref = $hash_ref;
 		}
+
 		elsif ($hash_ref->{"id"} == $curr_ref->{"id"} and $hash_ref->{"chr"} eq $curr_ref->{"chr"} and $hash_ref->{"strand"} eq $curr_ref->{"strand"} and $hash_ref->{"chrStart"} < $curr_ref->{"chrEnd"} + 10000 and $curr_ref->{"strand"} eq "+"?abs($hash_ref->{"repStart"}-$curr_ref->{"repEnd"})<20:abs($hash_ref->{"repEnd"}-$curr_ref->{"repStart"})<20){
 			#merge record
 			if ($curr_ref->{"strand"} eq "+"){
