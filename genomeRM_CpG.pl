@@ -8,7 +8,7 @@ modified from John Pace's script.
 
 =head2 USAGE
 
-perl genomeRM_CpG.pl -a <RM align file> [-m <c|a>] [-p <con|CG|aln|all>] [-c <class name>] [-r <repeat name>] [-s <INT> -l <INT>] [-b <INT>] [-h help]
+perl genomeRM_CpG.pl -a <RM align file> [-m <c|a>] [-p <con|CG|aln|all>] [-c <class name>] [-r <repeat name>] [-s <INT> -l <INT>] [-b <INT>] [-d <replibrary name>] [-u <INT>] [-h help]
 
 options:
 -a the repeatmasker alignment file.
@@ -36,6 +36,9 @@ maxleft. int. Only repeats with repleft <= maxleft are used for consensus regene
 -b
 minlength. int. only repeats with sequence length >= minlength are used for consensus regeneration. Recommend 100.
 
+-d
+repeat library used for repeatmasker. Highly recommended to verify sequence alignment information.
+
 -u
 number of processes in multithreads.
 
@@ -62,6 +65,7 @@ use File::Temp qw/ tempfile/;
 use Fcntl qw(:flock SEEK_END);
 use IO::Handle;
 use Statistics::Basic qw(:all);
+use File::Temp qw/ tempfile /;
 use Data::Dumper;
 
 STDERR->autoflush(1);
@@ -100,7 +104,6 @@ my $replib;
 if (defined $opts{d}){
 	print "reading and loading repeat library\n";
 	#convert embl file to fasta file
-	use File::Temp qw/ tempfile /;
 	my ($fh, $tempfasta) = tempfile();
 	my $replib = $opts{d};
 	my $embl = Bio::SeqIO->new(-file => $replib,
