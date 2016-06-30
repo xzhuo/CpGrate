@@ -64,7 +64,7 @@ use Bio::AlignIO;
 use File::Temp qw/ tempfile/;
 use Fcntl qw(:flock SEEK_END);
 use IO::Handle;
-use Statistics::Basic qw(:all);
+#use Statistics::Basic qw(:all);
 use Data::Dumper;
 
 STDERR->autoflush(1);
