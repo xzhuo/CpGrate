@@ -109,11 +109,11 @@ if (defined $opts{d}){
 	my $replib = $opts{d};
 	$tempfasta = substr($replib,0,-4)."fa";
 	print "$tempfasta\n";
-	my ($fh, $tempembl) = tempfile();
-	print "temp embl is $tempembl\n";
+	my ($fh,$tmpembl) = tempfile();
 	open my $oriFh, "<$replib";
+	open my $fh, ">$tmpembl";
 	while (<$oriFh>){
-		if($substr($_,0,2) eq "ID"){
+		if(substr($_,0,2) eq "ID"){
 			print $fh "$_";
 			last;
 		}
@@ -122,7 +122,7 @@ if (defined $opts{d}){
 		print $fh "$_";
 	}
 	close($oriFh);
-	my $embl = Bio::SeqIO->new(-fh => $fh,
+	my $embl = Bio::SeqIO->new(-file => $tmpembl,
 					-format => 'EMBL',
 				);
 	my $fasta = Bio::SeqIO->new(-file=> ">$tempfasta",
@@ -366,7 +366,7 @@ print "everything te in seq_hash_ref now,building simplealign:\n";
 my $pm = Parallel::ForkManager->new($cpus);
 while (my ($te, $array_ref) = each(%repHash)){
 	my $pid = $pm->start and next;
-	print "te name is $te\n\n";
+	print "te name is $te\n";
 	print "working on $te:\n";
 	@$array_ref = sort {$a->{"chr"} cmp $b->{"chr"} or $a->{"chrStart"} <=> $b->{"chrStart"} or $a->{"chrEnd"} <=> $b->{"chrEnd"}} @$array_ref; 
 	my $curr_ref;
