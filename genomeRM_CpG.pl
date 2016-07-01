@@ -106,11 +106,23 @@ if (defined $opts{d}){
 	print "reading and loading repeat library\n";
 	print "$opts{d}\n";
 	#convert embl file to fasta file
-	#my ($fh, $tempfasta) = tempfile();
 	my $replib = $opts{d};
 	$tempfasta = substr($replib,0,-4)."fa";
 	print "$tempfasta\n";
-	my $embl = Bio::SeqIO->new(-file => $replib,
+	my ($fh, $tempembl) = tempfile();
+	print "temp embl is $tempembl\n";
+	open my $oriFh, "<$replib";
+	while (<$oriFh>){
+		if($substr($_,0,2) eq "ID"){
+			print $fh "$_";
+			last;
+		}
+	}
+	while (<$oriFh>){
+		print $fh "$_";
+	}
+	close($oriFh);
+	my $embl = Bio::SeqIO->new(-fh => $fh,
 					-format => 'EMBL',
 				);
 	my $fasta = Bio::SeqIO->new(-file=> ">$tempfasta",
@@ -122,6 +134,7 @@ if (defined $opts{d}){
 		$seq->seq($emblseqstr);
 		$fasta->write_seq($seq);
 	}
+	close($fh);
 
 	#build db::fasta
 	$db = Bio::DB::Fasta->new($tempfasta);
