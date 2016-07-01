@@ -61,10 +61,11 @@ use Bio::SeqIO;
 use Bio::SimpleAlign;
 use Bio::LocatableSeq;
 use Bio::AlignIO;
+use Bio::DB::Fasta;
 use File::Temp qw/ tempfile/;
 use Fcntl qw(:flock SEEK_END);
 use IO::Handle;
-#use Statistics::Basic qw(:all);
+use Statistics::Basic qw(:all);
 use Data::Dumper;
 
 STDERR->autoflush(1);
@@ -100,19 +101,26 @@ my @alignArray = ();
 
 my $db;
 my $replib;
+my $tempfasta;
 if (defined $opts{d}){
 	print "reading and loading repeat library\n";
+	print "$opts{d}\n";
 	#convert embl file to fasta file
-	my ($fh, $tempfasta) = tempfile();
+	#my ($fh, $tempfasta) = tempfile();
 	my $replib = $opts{d};
+	$tempfasta = substr($replib,0,-4)."fa";
+	print "$tempfasta\n";
 	my $embl = Bio::SeqIO->new(-file => $replib,
 					-format => 'EMBL',
 				);
-	my $fasta = Bio::SeqIO->new(-fh => $fh,
+	my $fasta = Bio::SeqIO->new(-file=> ">$tempfasta",
 					-format => 'Fasta',
 				);
-	while (my $seq = $in->next_seq()){
-		$out->write_seq($seq);
+	while (my $seq = $embl->next_seq()){
+		my $emblseqstr = $seq->seq();
+		$emblseqstr =~ s/[^ATGC]/-/g; # non-GATC NTs are not correctly revcom in repeatmasker alignment.
+		$seq->seq($emblseqstr);
+		$fasta->write_seq($seq);
 	}
 
 	#build db::fasta
@@ -161,6 +169,32 @@ while(<$alignfile>){
 #close the alignfile
 close($alignfile);
 print "\nThe align file has been loaded\n";
+
+#open the outfile
+my $outFile;
+#my @outFile  : shared;
+my $newFasta;
+#my @newFasta : shared;
+
+#parse alnHash to regenerate consensus for all repeats:
+
+
+if ($purpose eq "CG" || $purpose eq "all"){
+	open $outFile, ">$outName";
+	print $outFile "te\tcopies\tnumC\tmutC\tnumG\tmutG\tnumCpG\tmutTpG\tmutCpA\tlength\n";
+#	foreach (@outFile){
+#		print $outFile "$_\n";
+#	}
+#	close ($outFile);
+}
+if ($purpose eq "con" || $purpose eq "aln" || $purpose eq "all"){
+	open $newFasta, ">$outFasta";
+#	foreach (@newFasta){
+#		print $newFasta ">$_->[0]\n$_->[1]\n";
+#	}
+#	close ($newFasta);
+}
+
 
 #a HASH holding each repeat with its MSA
 my %repHash = ();
@@ -290,7 +324,8 @@ for(my $i = 0; $i<= $#alignArray;$i++){
 			substr($repSeq, $gap-1, 1) = "";
 		}
 		$chrSeq =~ s/[^ATGC]/-/g;
-		$repSeq =~ s/[^ATGC]/-/g;
+		$repSeq =~ s/[^ATGC]/-/g; # non-GATC NTs are not correctly revcom in repeatmasker alignment.
+
 		next if $chrSeq eq ""; #remove suspicious sequences (I don't know why they are in the alignment in the first place. but the fact that they have different seq length causes a problem for MSA building).
 		#next if Func::pairwise_identity($chrSeq,$repSeq) > 40;
 
@@ -315,37 +350,42 @@ for(my $i = 0; $i<= $#alignArray;$i++){
 }
 undef @alignArray;
 print "everything te in seq_hash_ref now,building simplealign:\n";
-#my $pm1 = Parallel::ForkManager->new($cpus);
-my %alnHash = ();
+my $pm = Parallel::ForkManager->new($cpus);
 while (my ($te, $array_ref) = each(%repHash)){
-#	my $pid = $pm1->start and next;
+	my $pid = $pm->start and next;
 	print "te name is $te\n\n";
+	print "working on $te:\n";
 	@$array_ref = sort {$a->{"chr"} cmp $b->{"chr"} or $a->{"chrStart"} <=> $b->{"chrStart"} or $a->{"chrEnd"} <=> $b->{"chrEnd"}} @$array_ref; 
 	my $curr_ref;
 	my $repfull;
+	my $msa;
 	if (defined $opts{d}){
 		$repfull = $db->get_Seq_by_id($te);
+		my $repfullseq = $repfull->seq();
 	}
 	foreach my $hash_ref(@$array_ref){
 		
 		#next correct repStart and repEnd if they are wrong:
-		if (defined $opts{d}){
+		if (defined $opts{d}){ 
 			my $seqaln = $hash_ref->{"repSeq"};
 			my $tempStart = $hash_ref->{"repStart"};
 			my $tempEnd = $hash_ref->{"repEnd"};
+			my $tempLeft = $hash_ref->{"repLeft"};
 			my $seqpos = $repfull->subseq($tempStart,$tempEnd);
 			unless ($seqaln eq $seqpos){
-				print "hmm, something wrong with the alignment!\n";
 				my $tmpCheck = 0;
-				for my $diff(-1,-2,1,2){
+				for my $diff(-1,1,2,-2,-3,3,-4,4,-5,5,-6,6,-7,7,-8,8,-9,9,-10,10){
 					$seqpos = $repfull->subseq($tempStart + $diff,$tempEnd + $diff);
+					#print "$diff\n$seqpos\n";
 					if ($seqaln eq $seqpos){
 						$hash_ref->{"repStart"} = $tempStart + $diff;
 						$hash_ref->{"repEnd"} = $tempEnd + $diff;
+						$hash_ref->{"repLeft"} = $tempLeft - $diff;
 						$tmpCheck = 1;	#swtich it!
+						last;
 					}
 				}
-				die "wrong alignment somehow!" unless $tempCheck;
+				die "wrong alignment somehow!\n$hash_ref->{'chr'}\t$hash_ref->{'chrStart'}\t$hash_ref->{'chrEnd'}\n$seqaln\n$seqpos\n\n" unless $tmpCheck;
 			}
 		}
 
@@ -450,12 +490,11 @@ while (my ($te, $array_ref) = each(%repHash)){
 									-alphabet => "dna",
 								);
 				#add the chrSeq with insertions deleted to the MSA:
-				if (exists $alnHash{$te}){
-					$alnHash{$te}->add_seq($tempSeq);
+				if (defined $msa){
+					$msa->add_seq($tempSeq);
 				}
 				else{
-					my $tempAln = Bio::SimpleAlign->new(-seqs => [$tempSeq]);
-					$alnHash{$te} = $tempAln;
+					$msa = Bio::SimpleAlign->new(-seqs => [$tempSeq]);
 				}
 			}
 			else{
@@ -476,54 +515,19 @@ while (my ($te, $array_ref) = each(%repHash)){
 							-alphabet => "dna",
 						);
 		#add the chrSeq with insertions deleted to the MSA:
-		if (exists $alnHash{$te}){
-			$alnHash{$te}->add_seq($tempSeq);
+		if (defined $msa){
+			$msa->add_seq($tempSeq);
 		}
 		else{
-			my $tempAln = Bio::SimpleAlign->new(-seqs => [$tempSeq]);
-			$alnHash{$te} = $tempAln;
+			$msa = Bio::SimpleAlign->new(-seqs => [$tempSeq]);
 		}
 	}
 	else {
 		#print "the last record not included!!!\n";
 		#print "not included:\n$curr_ref->{'chr'}\t$curr_ref->{'chrStart'}\t$curr_ref->{'chrEnd'}\t$curr_ref->{'strand'}\nstart is $curr_ref->{'repStart'}\nend is $curr_ref->{'repLeft'}\n\n";
 	}
-#	$pm1->finish;
-}
-#$pm1->wait_all_children;
-undef %repHash;
-	
-print "alignment done!\n";
-#open the outfile
-my $outFile;
-#my @outFile  : shared;
-my $newFasta;
-#my @newFasta : shared;
-
-#parse alnHash to regenerate consensus for all repeats:
-
-
-if ($purpose eq "CG" || $purpose eq "all"){
-	open $outFile, ">$outName";
-	print $outFile "te\tcopies\tnumC\tmutC\tnumG\tmutG\tnumCpG\tmutTpG\tmutCpA\tlength\n";
-#	foreach (@outFile){
-#		print $outFile "$_\n";
-#	}
-#	close ($outFile);
-}
-if ($purpose eq "con" || $purpose eq "aln" || $purpose eq "all"){
-	open $newFasta, ">$outFasta";
-#	foreach (@newFasta){
-#		print $newFasta ">$_->[0]\n$_->[1]\n";
-#	}
-#	close ($newFasta);
-}
-
-
-my $pm2 = Parallel::ForkManager->new($cpus);
-while (my ($te, $msa) = each(%alnHash)){
-	my $pid = $pm2->start and next;
-	print "working on $te:\n";
+	print "$te alignment done!\n";
+	next unless defined $msa;
 	unless ($msa->is_flush){ # quit and print error message if not all seqs in alignment have same length.
 		print "$te alignment is not flush!!\n";
 		my @all_length = ();
@@ -563,7 +567,7 @@ while (my ($te, $msa) = each(%alnHash)){
 #			push (@newFasta, [$temp_id,$temp_seq]);
 		}
 	}
-	$pm2->finish if $copies == 1;
+	$pm->finish if $copies == 1;
 	if ($purpose eq "CG" || $purpose eq "all"){
 		my $numCpG = 0; #number of all CpG sites in repSeq
 		my $mutTpG = 0; #number of mutated CpG to TpG
@@ -609,11 +613,17 @@ while (my ($te, $msa) = each(%alnHash)){
 #		push (@outFile, "$te\t$copies\t$numC\t$mutC\t$numG\t$mutG\t$numCpG\t$mutTpG\t$mutCpA"); 
 	}
 	print "$te analysis done!!!\n";
-	$pm2->finish;
+	$pm->finish;
 }
-
-$pm2->wait_all_children;
+undef %repHash;
+	
+$pm->wait_all_children;
 print "all threads done!!!\n\n";
+
+#if (defined $opts{d}){
+#	unlink($tempfasta,$tempfasta.".index");
+#}
+
 if ($purpose eq "CG" || $purpose eq "all"){
 #	open $outFile, ">$outName";
 #	print $outFile "te\tcopies\tnumC\tmutC\tnumG\tmutG\tnumCpG\tmutTpG\tmutCpA\n";
