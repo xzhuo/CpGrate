@@ -111,7 +111,7 @@ if (defined $opts{d}){
 	print "$tempfasta\n";
 	my ($fh,$tmpembl) = tempfile();
 	open my $oriFh, "<$replib";
-	open my $fh, ">$tmpembl";
+	open $fh, ">$tmpembl";
 	while (<$oriFh>){
 		if(substr($_,0,2) eq "ID"){
 			print $fh "$_";
