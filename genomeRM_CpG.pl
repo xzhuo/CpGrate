@@ -540,7 +540,7 @@ while (my ($te, $array_ref) = each(%repHash)){
 		#print "not included:\n$curr_ref->{'chr'}\t$curr_ref->{'chrStart'}\t$curr_ref->{'chrEnd'}\t$curr_ref->{'strand'}\nstart is $curr_ref->{'repStart'}\nend is $curr_ref->{'repLeft'}\n\n";
 	}
 	print "$te alignment done!\n";
-	next unless defined $msa;
+	$pm->finish unless defined $msa;
 	unless ($msa->is_flush){ # quit and print error message if not all seqs in alignment have same length.
 		print "$te alignment is not flush!!\n";
 		my @all_length = ();
