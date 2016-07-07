@@ -66,6 +66,7 @@ use File::Temp qw/ tempfile/;
 use Fcntl qw(:flock SEEK_END);
 use IO::Handle;
 use Statistics::Basic qw(:all);
+use MLDBM;
 use Data::Dumper;
 
 STDERR->autoflush(1);
@@ -110,6 +111,7 @@ if (defined $opts{d}){
 	$tempfasta = substr($replib,0,-4)."fa";
 	print "$tempfasta\n";
 	my ($fh,$tmpembl) = tempfile();
+	#somehow the tempfile does not get deleted.
 	open my $oriFh, "<$replib";
 	open $fh, ">$tmpembl";
 	while (<$oriFh>){
@@ -135,7 +137,7 @@ if (defined $opts{d}){
 		$fasta->write_seq($seq);
 	}
 	close($fh);
-
+	unlink $tmpembl; #delete the file manually
 	#build db::fasta
 	$db = Bio::DB::Fasta->new($tempfasta);
 	print "tempfasta: $tempfasta\n"; #for debug
@@ -210,7 +212,15 @@ if ($purpose eq "con" || $purpose eq "aln" || $purpose eq "all"){
 
 
 #a HASH holding each repeat with its MSA
-my %repHash = ();
+for my $dbfile (qw(mldbm.pag mldbm.dir)){
+	unlink $dbfile;
+	die "unable to delete dbfile!\n\n" if -e $file;
+}
+
+#my %repHash = (); #This is simple perl hash access.
+
+#use mldb:
+my $dbm = tie my %repHash, 'MLDBM', 'mldbm', O_CREAT|O_RDWR, 0640 or die $!;
 
 #Loop through the array, parsing the lines and add to an output file
 for(my $i = 0; $i<= $#alignArray;$i++){
@@ -354,7 +364,12 @@ for(my $i = 0; $i<= $#alignArray;$i++){
 					"id" => $id, 
 				};
 		if(exists $repHash{$repName}){
-			push @{$repHash{$repName}}, $seq_hash_ref;
+			#with perl hash:
+			#push @{$repHash{$repName}}, $seq_hash_ref;
+			#with dbm:
+			my @tmpdbarray = @{$repHash{$repName}};
+			push @tmpdbarray, $seq_hash_ref;
+			$repHash{$repName} = \@tmpdbarray;
 		}
 		else{
 			$repHash{$repName} = [$seq_hash_ref];
@@ -629,6 +644,10 @@ while (my ($te, $array_ref) = each(%repHash)){
 	$pm->finish;
 }
 undef %repHash;
+for my $dbfile (qw(mldbm.pag mldbm.dir)){
+	unlink $dbfile;
+	print "hmm, unable to delete dbfile!\n\n" if -e $file;
+}
 	
 $pm->wait_all_children;
 print "all threads done!!!\n\n";
