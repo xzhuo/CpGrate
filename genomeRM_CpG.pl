@@ -63,10 +63,11 @@ use Bio::LocatableSeq;
 use Bio::AlignIO;
 use Bio::DB::Fasta;
 use File::Temp qw/ tempfile/;
-use Fcntl qw(:flock SEEK_END);
+use Fcntl qw(:flock SEEK_END O_CREAT O_RDWR);
 use IO::Handle;
 use Statistics::Basic qw(:all);
-use MLDBM;
+use BerkeleyDB;
+use MLDBM qw(BerkeleyDB::Hash);
 use Data::Dumper;
 
 STDERR->autoflush(1);
@@ -212,15 +213,12 @@ if ($purpose eq "con" || $purpose eq "aln" || $purpose eq "all"){
 
 
 #a HASH holding each repeat with its MSA
-for my $dbfile (qw(mldbm.pag mldbm.dir)){
+for my $dbfile (qw(mldbm)){
 	unlink $dbfile;
-	die "unable to delete dbfile!\n\n" if -e $file;
+	die "unable to delete dbfile!\n\n" if -e $dbfile;
 }
 
-#my %repHash = (); #This is simple perl hash access.
-
-#use mldb:
-my $dbm = tie my %repHash, 'MLDBM', 'mldbm', O_CREAT|O_RDWR, 0640 or die $!;
+my %repHash = (); #This is simple perl hash access.
 
 #Loop through the array, parsing the lines and add to an output file
 for(my $i = 0; $i<= $#alignArray;$i++){
@@ -365,11 +363,7 @@ for(my $i = 0; $i<= $#alignArray;$i++){
 				};
 		if(exists $repHash{$repName}){
 			#with perl hash:
-			#push @{$repHash{$repName}}, $seq_hash_ref;
-			#with dbm:
-			my @tmpdbarray = @{$repHash{$repName}};
-			push @tmpdbarray, $seq_hash_ref;
-			$repHash{$repName} = \@tmpdbarray;
+			push @{$repHash{$repName}}, $seq_hash_ref;
 		}
 		else{
 			$repHash{$repName} = [$seq_hash_ref];
@@ -377,9 +371,19 @@ for(my $i = 0; $i<= $#alignArray;$i++){
 	}
 }
 undef @alignArray;
-print "everything te in seq_hash_ref now,building simplealign:\n";
+print "everything te in seq_hash_ref now,building repdb:\n";
+#use mldb:
+tie my %repDB, 'MLDBM', -Filename => 'mldbm', 
+				-Flags => DB_CREATE 
+				or die $!;
+
+foreach my $key(keys %repHash){
+	$repDB{$key} = $repHash{$key};
+}
+undef %repHash;
+print "now repDB is done!\n";
 my $pm = Parallel::ForkManager->new($cpus);
-while (my ($te, $array_ref) = each(%repHash)){
+while (my ($te, $array_ref) = each(%repDB)){
 	my $pid = $pm->start and next;
 	print "te name is $te\n";
 	print "working on $te:\n";
@@ -643,10 +647,9 @@ while (my ($te, $array_ref) = each(%repHash)){
 	print "$te analysis done!!!\n";
 	$pm->finish;
 }
-undef %repHash;
-for my $dbfile (qw(mldbm.pag mldbm.dir)){
+for my $dbfile (qw(mldbm)){
 	unlink $dbfile;
-	print "hmm, unable to delete dbfile!\n\n" if -e $file;
+	print "hmm, unable to delete dbfile!\n\n" if -e $dbfile;
 }
 	
 $pm->wait_all_children;
