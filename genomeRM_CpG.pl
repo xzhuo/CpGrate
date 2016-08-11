@@ -13,6 +13,8 @@ perl genomeRM_CpG.pl -a <RM align file> [-m <c|a>] [-p <con|CG|aln|all>] [-c <cl
 options:
 -a the repeatmasker alignment file.
 
+-o the repeatmasker output file.
+
 -m the model, "c" for consensus based CpG calculation, "a" for alignment based calculation. Default value is "c".
 
 -p 
@@ -68,17 +70,20 @@ use IO::Handle;
 use Statistics::Basic qw(:all);
 use BerkeleyDB;
 use MLDBM qw(BerkeleyDB::Hash);
+use Set::IntervalTree;
 use Data::Dumper;
+
 
 STDERR->autoflush(1);
 STDOUT->autoflush(1);
 
 my %opts=();
 getopts("ha:m:p:c:r:s:l:b:d:u:", \%opts);
-my $usage = "perl ParseRMalign_regenerate_consensus.pl -a <RM align file> [-m <c|a>] [-p <con|CG|aln|all>] [-c <class name>] [-r <repeat name>] [-s <INT> -l <INT>] [-b <INT>] [-d <replibrary name>] [-u <INT>]";
+my $usage = "perl ParseRMalign_regenerate_consensus.pl -a <RM align file> -o <RM output file> [-m <c|a>] [-p <con|CG|aln|all>] [-c <class name>] [-r <repeat name>] [-s <INT> -l <INT>] [-b <INT>] [-d <replibrary name>] [-u <INT>]";
 die "$usage" if $opts{h};
 
 my $fileName = $opts{a} or die "$usage";
+my $RMfile = $opts{o} or die "$usage";
 $opts{p} ||= "con"; #set default parameter for p: only output consensus.
 die "$usage" unless $opts{p} eq "con" || $opts{p} eq "CG" || $opts{p} eq "all" || $opts{p} eq "aln";
 $opts{m} ||= "c"; #set default model as consensus
@@ -144,6 +149,24 @@ if (defined $opts{d}){
 	print "tempfasta: $tempfasta\n"; #for debug
 	print "repeat library loaded!\n";
 }
+
+print "reading and processing ".$RMfile."\n";
+# open the RM output file
+my %trees = ();
+open my $RMout, "<$RMfile";
+while(<$RMout>){
+	# get the columns:blabla
+	if(exists $trees{$chr}){
+		$trees{$chr}->insert($te, $chr_start, $chr_end);
+	}
+	else{
+		$trees{$chr} = Set::IntervalTree->new;
+		$trees{$chr}->insert($te, $chr_start, $chr_end);
+	}
+}
+close($RMout);
+
+print "RMout entry in IntervalTree ready for query!\n";
 
 print "Reading and processing ".$fileName."\n";
 
