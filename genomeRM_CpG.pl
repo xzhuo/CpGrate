@@ -47,6 +47,9 @@ ps: if -s, -l and -b are not defined, any fragment matches particular TE would b
 -h
 help
 
+-i
+Include insertions in the alignment or not. If it is false, the MSA length would be exactly the consensus length. if it is true, then insertions of indivudual copy would be inclued in the MSA. Default option is false. it is only compatible with "-p aln".
+
 =cut
 #use forks;
 #use forks::shared;
@@ -76,16 +79,16 @@ STDERR->autoflush(1);
 STDOUT->autoflush(1);
 
 my %opts=();
-getopts("ha:m:p:c:r:s:l:b:d:u:", \%opts);
-my $usage = "perl ParseRMalign_regenerate_consensus.pl -a <RM align file> [-m <c|a>] [-p <con|CG|aln|all>] [-c <class name>] [-r <repeat name>] [-s <INT> -l <INT>] [-b <INT>] [-d <replibrary name>] [-u <INT>]";
+getopts("hia:m:p:c:r:s:l:b:d:u:", \%opts);
+my $usage = "perl ParseRMalign_regenerate_consensus.pl -a <RM align file> [-m <c|a>] [-p <con|CG|aln|all>] [-c <class name>] [-r <repeat name>] [-s <INT> -l <INT>] [-b <INT>] [-d <replibrary name>] [-u <INT>] [-i]";
 die "$usage" if $opts{h};
-
 my $fileName = $opts{a} or die "$usage";
 # my $RMfile = $opts{o} or die "$usage";
 $opts{p} ||= "con"; #set default parameter for p: only output consensus.
 die "$usage" unless $opts{p} eq "con" || $opts{p} eq "CG" || $opts{p} eq "all" || $opts{p} eq "aln";
 $opts{m} ||= "c"; #set default model as consensus
 die "$usage" unless $opts{m} eq "c" || $opts{m} eq "a";
+die "$usage" if $opts{i} and ($opts{p} eq "con" || $opts{p} eq "CG" || $opts{p} eq "all");
 $opts{u} ||= 1;
 my $cpus = $opts{u};
 my $purpose = $opts{p};
@@ -358,13 +361,30 @@ for(my $i = 0; $i<= $#alignArray;$i++){
 
 		#delete insertions and create new mutiple alignment
 		$chrSeq = uc($chrSeq);
-		$repSeq = uc($repSeq); 
-		my $gaps_ref = Func::find($repSeq, "-"); #gap in repSeq means insertions in chrSeq, we have to delete them!
+		$repSeq = uc($repSeq);
+		my $gaps_ref = Func::find($repSeq, "-"); #gap in repSeq means insertions in chrSeq, we have to find them out. save them to another hash if $opts{i}, else delete them.
 		my @descending_gaps = sort { $b<=>$a } @$gaps_ref;
+		my @indel_matrix = ();  # an array of hashes with each item like: {pos:3, seq: 'TA'}
 		foreach my $gap(@descending_gaps){
+			$indel_seq = substr($chrSeq, $gap-1, 1);
+			if (scalar(@indel_matrix)){
+				for $indel in @indel_matrix{
+					$indel{'pos'} -= 1;
+				}
+				if $indel_matrix[-1]{'pos'} == $gap{
+					$indel_matrix[-1]{'seq'} = $indel_seq.$indel_matrix[-1]{'seq'};
+				}
+				else{
+					push @indel_matrix, ('pos' => $gap, 'seq' => $indel_seq);
+				}
+			}
+			else{
+				push @indel_matrix, ('pos' => $gap, 'seq' => $indel_seq);
+			}
 			substr($chrSeq, $gap-1, 1) = "";
 			substr($repSeq, $gap-1, 1) = "";
 		}
+		my @indel_matrix = sort {$a->{'pos'}<=>$b->{'pos'}} @indel_matrix;  # sort indel matrix by position ascending.
 		$chrSeq =~ s/[^ATGC]/-/g;
 		$repSeq =~ s/[^ATGC]/-/g; # non-GATC NTs are not correctly revcom in repeatmasker alignment.
 
@@ -380,7 +400,8 @@ for(my $i = 0; $i<= $#alignArray;$i++){
 					"repEnd" => $repEnd,
 					"repLeft" => $repLeft,
 					"strand" => $strand,
-					"id" => $id, 
+					"id" => $id,
+					"indel_matrix" => \@indel_matrix,
 				};
 		if(exists $repHash{$repName}){
 			#with perl hash:
@@ -412,6 +433,7 @@ while (my ($te, $array_ref) = each(%repDB)){
 	my $curr_ref;
 	my $repfull;
 	my $msa;
+	my %msa_indels = ();
 	if (defined $opts{d}){
 		$repfull = $db->get_Seq_by_id($te);
 		my $repfullseq = $repfull->seq();
@@ -452,6 +474,10 @@ while (my ($te, $array_ref) = each(%repDB)){
 				if($hash_ref->{"repStart"}>$curr_ref->{"repEnd"}){
 					$curr_ref->{"chrSeq"} = $curr_ref->{"chrSeq"}."-"x($hash_ref->{"repStart"}-$curr_ref->{"repEnd"}-1).$hash_ref->{"chrSeq"};
 					$curr_ref->{"repSeq"} = $curr_ref->{"repSeq"}."-"x($hash_ref->{"repStart"}-$curr_ref->{"repEnd"}-1).$hash_ref->{"repSeq"};
+					for $indel in ($hash_ref->{"indel_matrix"}){
+						push $curr_ref->{"indel_matrix"}, {"pos" => $indel{"pos"} + $hash_ref->{"repStart"} - $curr_ref->{"repStart"}, "seq" => $indel{"seq"}};
+					}
+
 					$curr_ref->{"repEnd"} = $hash_ref->{"repEnd"};
 					$curr_ref->{"repLeft"} = $hash_ref->{"repLeft"};
 					$curr_ref->{"chrEnd"} = $hash_ref->{"chrEnd"};
@@ -495,6 +521,10 @@ while (my ($te, $array_ref) = each(%repDB)){
 				if($hash_ref->{"repEnd"}<$curr_ref->{"repStart"}){
 					$curr_ref->{"chrSeq"} = $hash_ref->{"chrSeq"}."-"x($curr_ref->{"repStart"}-$hash_ref->{"repEnd"}-1).$curr_ref->{"chrSeq"};
 					$curr_ref->{"repSeq"} = $hash_ref->{"repSeq"}."-"x($curr_ref->{"repStart"}-$hash_ref->{"repEnd"}-1).$curr_ref->{"repSeq"};
+					for $indel in ($curr_ref->{"indel_matrix"}){
+						$indel{"pos"} = $indel{"pos"} + $curr_ref->{"repStart"} - $hash_ref->{"repStart"};
+					}
+					push @{$curr_ref->{"indel_matrix"}}, @{$hash_ref->{"indel_matrix"}};
 					$curr_ref->{"chrEnd"} = $hash_ref->{"chrEnd"};
 					$curr_ref->{"repStart"} = $hash_ref->{"repStart"};
 				}
@@ -538,16 +568,28 @@ while (my ($te, $array_ref) = each(%repDB)){
 				#assign new bio::seq to alignemnt
 				my $chrSeq = "-"x($curr_ref->{"repStart"}-1).$curr_ref->{"chrSeq"}."-"x($curr_ref->{"repLeft"});
 #				print "$headline\n$chrSeq\n";
+				my $tempId = $curr_ref->{"chr"}."_".$curr_ref->{"chrStart"}."-".$curr_ref->{"chrEnd"}.$curr_ref->{"strand"};
 				my $tempSeq = Bio::LocatableSeq->new(-seq => $chrSeq,
-									-id => $curr_ref->{"chr"}."_".$curr_ref->{"chrStart"}."-".$curr_ref->{"chrEnd"}.$curr_ref->{"strand"},
+									-id => $tempId,
 									-alphabet => "dna",
 								);
 				#add the chrSeq with insertions deleted to the MSA:
 				if (defined $msa){
 					$msa->add_seq($tempSeq);
+					for my $indels in ($curr_ref->{"indel_matrix"}){
+						if ($msa_indels{$indels->{'pos'} + $curr_ref->{"repStart"}-1} exists){
+							push @{$msa_indels{$indels->{'pos'} + $curr_ref->{"repStart"}-1}}, {$tempId => $indels->{'seq'}};
+						}
+						else{
+							$msa_indels{$indels->{'pos'} + $curr_ref->{"repStart"}-1} = [{$tempId => $indels->{'seq'}}];
+						}
+					}
 				}
 				else{
 					$msa = Bio::SimpleAlign->new(-seqs => [$tempSeq]);
+					for my $indels in ($curr_ref->{"indel_matrix"}){
+						$msa_indels{$indels->{'pos'} + $curr_ref->{"repStart"}-1} = [{$tempId => $indels->{'seq'}}];
+					}
 				}
 			}
 			else{
@@ -560,19 +602,31 @@ while (my ($te, $array_ref) = each(%repDB)){
 		#print "the last record!!!\n";
 		#print "$curr_ref->{'chr'}\t$curr_ref->{'chrStart'}\t$curr_ref->{'chrEnd'}\t$curr_ref->{'strand'}\nstart is $curr_ref->{'repStart'}\nend is $curr_ref->{'repLeft'}\n\n";
 		
-		#assign last bio::seq to alignemnt
+		#assign last bio::seq to alignment
 		my $chrSeq = "-"x($curr_ref->{"repStart"}-1).$curr_ref->{"chrSeq"}."-"x($curr_ref->{"repLeft"});
 #		print "$headline\n$chrSeq\n";
+		my $tempId = $curr_ref->{"chr"}."_".$curr_ref->{"chrStart"}."-".$curr_ref->{"chrEnd"}.$curr_ref->{"strand"};
 		my $tempSeq = Bio::LocatableSeq->new(-seq => $chrSeq,
-							-id => $curr_ref->{"chr"}."_".$curr_ref->{"chrStart"}."-".$curr_ref->{"chrEnd"}.$curr_ref->{"strand"},
+							-id => $tempId,
 							-alphabet => "dna",
 						);
 		#add the chrSeq with insertions deleted to the MSA:
 		if (defined $msa){
 			$msa->add_seq($tempSeq);
+			for my $indels in ($curr_ref->{"indel_matrix"}){
+				if ($msa_indels{$indels->{'pos'} + $curr_ref->{"repStart"}-1} exists){
+					push @{$msa_indels{$indels->{'pos'} + $curr_ref->{"repStart"}-1}}, {$tempId => $indels->{'seq'}};
+				}
+				else{
+					$msa_indels{$indels->{'pos'} + $curr_ref->{"repStart"}-1} = [{$tempId => $indels->{'seq'}}];
+				}
+			}
 		}
 		else{
 			$msa = Bio::SimpleAlign->new(-seqs => [$tempSeq]);
+			for my $indels in ($curr_ref->{"indel_matrix"}){
+				$msa_indels{$indels->{'pos'} + $curr_ref->{"repStart"}-1} = [{$tempId => $indels->{'seq'}}];
+			}
 		}
 	}
 	else {
