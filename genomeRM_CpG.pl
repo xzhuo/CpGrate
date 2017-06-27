@@ -48,7 +48,7 @@ ps: if -s, -l and -b are not defined, any fragment matches particular TE would b
 help
 
 -i
-Include insertions in the alignment or not. If it is false, the MSA length would be exactly the consensus length. if it is true, then insertions of indivudual copy would be inclued in the MSA. Default option is false. it is only compatible with "-p aln".
+Include insertions in the alignment or not. If it is false, the MSA length would be exactly the consensus length. if it is true, then insertions of individual copy would be inclued in the MSA. Default option is false. it is only compatible with "-p aln".
 
 =cut
 #use forks;
@@ -474,8 +474,8 @@ while (my ($te, $array_ref) = each(%repDB)){
 				if($hash_ref->{"repStart"}>$curr_ref->{"repEnd"}){
 					$curr_ref->{"chrSeq"} = $curr_ref->{"chrSeq"}."-"x($hash_ref->{"repStart"}-$curr_ref->{"repEnd"}-1).$hash_ref->{"chrSeq"};
 					$curr_ref->{"repSeq"} = $curr_ref->{"repSeq"}."-"x($hash_ref->{"repStart"}-$curr_ref->{"repEnd"}-1).$hash_ref->{"repSeq"};
-					for $indel in ($hash_ref->{"indel_matrix"}){
-						push $curr_ref->{"indel_matrix"}, {"pos" => $indel{"pos"} + $hash_ref->{"repStart"} - $curr_ref->{"repStart"}, "seq" => $indel{"seq"}};
+					for my $indel in (@{$hash_ref->{"indel_matrix"}}){
+						push @{$curr_ref->{"indel_matrix"}}, {"pos" => $indel->{"pos"}+$hash_ref->{"repStart"}-$curr_ref->{"repStart"}, "seq" => $indel{"seq"}};
 					}
 
 					$curr_ref->{"repEnd"} = $hash_ref->{"repEnd"};
@@ -501,6 +501,58 @@ while (my ($te, $array_ref) = each(%repDB)){
 					}
 					my $tempseq1 = substr($curr_ref->{"chrSeq"},0-$curr_overlap,$min_overlap);
 					my $tempseq2 = substr($hash_ref->{"chrSeq"},0,$min_overlap);
+					my $tempOverlap_length1 = 0;
+					my $tempOverlap_length2 = 0;
+					for my $individual_indel1 in (@{$curr_ref->{"indel_matrix"}}){
+						if ($individual_indel1->{"pos"} > $curr_ref->{"repEnd"}-$curr_ref->{"repStart"}+1-$curr_overlap and $individual_indel1->{"pos"} < $curr_ref->{"repEnd"}-$curr_ref->{"repStart"}+1-$curr_overlap+$min_overlap){
+							$tempOverlap_length1 += length($individual_indel1->{"seq"});
+						}
+					}
+					for my $individual_indel2 in (@{$hash_ref->{"indel_matrix"}}){
+						if ($individual_indel2->{"pos"} < $min_overlap){
+							$tempOverlap_length2 += length($individual_indel2->{"seq"});
+						}
+					}
+					if ($tempOverlap_length1 <= $tempOverlap_length2){
+						if ($min_overlap == $curr_overlap){
+							# first 2 section from curr_ref, last 1 section from hash_ref: keep all from curr_ref, push last part of hash_ref.
+							for my $indel in (@{$hash_ref->{"indel_matrix"}}){
+								if ($indel->{"pos"} > $min_overlap){
+									push @{$curr_ref->{"indel_matrix"}}, {"pos" => $indel->{"pos"}+$curr_ref->{"repEnd"}-$curr_ref->{"repStart"}+1-$curr_overlap, "seq" => $indel{"seq"}};
+								}
+							}
+						}
+						#else all from curr_ref
+					}
+					else{
+						if ($min_overlap == $curr_overlap){
+							#first 1 section from curr_ref, last 2 sections from hash_ref: remove last part of curr_ref, push all hash_ref
+							for my $indel in (@{$curr_ref->{"indel_matrix"}}){
+								if ($indel{"pos"} > $hash_ref->{"repStart"}-$curr_ref->{"repStart"}+1){
+									$indel{"seq"} = "";
+									$indel{"pos"} = 0;  # is 0 ok here?
+								}
+							}
+							for my $indel in (@{$hash_ref->{"indel_matrix"}}){
+								if ($indel{"pos"} > $min_overlap){
+									push @{$curr_ref->{"indel_matrix"}}, {"pos" => $indel->{"pos"}+$curr_ref->{"repEnd"}-$curr_ref->{"repStart"}+1-$curr_overlap, "seq" => $indel{"seq"}}; 
+								}
+							}
+
+						}
+						else{
+							#first and 3rd from curr_ref, middle one from hash_ref
+							for my $indel in (@{$curr_ref->{"indel_matrix"}}){
+								if ($indel{"pos"} > $hash_ref->{"repStart"}-$curr_ref->{"repStart"}+1 and $indel{"pos"} < $hash_ref->{"repEnd"}-$curr_ref->{"repStart"}+1){
+									$indel{"seq"} = "";
+									$indel{"pos"} = 0;  # is 0 ok here?
+								}
+							}
+							for my $indel in (@{$hash_ref->{"indel_matrix"}}){
+								push @{$curr_ref->{"indel_matrix"}}, {"pos" => $indel->{"pos"}+$curr_ref->{"repEnd"}-$curr_ref->{"repStart"}+1-$curr_overlap, "seq" => $indel{"seq"}}; 
+							}
+						}
+					}
 					my $consensus = substr($hash_ref->{"repSeq"},0,$min_overlap);
 					my $overseq = "";
 					#print "$curr_chrSeq\n$tempseq1\n$tempseq2\n$consensus\n$hash_chrSeq\n\n";
@@ -547,6 +599,36 @@ while (my ($te, $array_ref) = each(%repDB)){
 					}
 					my $tempseq1 = substr($curr_ref->{"chrSeq"},$curr_overlap-$min_overlap,$min_overlap);
 					my $tempseq2 = substr($hash_ref->{"chrSeq"},0-$min_overlap);
+					my $tempOverlap_length1 = 0;
+					my $tempOverlap_length2 = 0;
+					for my $individual_indel1 in (@{$curr_ref->{"indel_matrix"}}){
+						if ($individual_indel1->{"pos"} > $curr_ref->{"repEnd"}-$curr_ref->{"repStart"}+1-$curr_overlap and $individual_indel1->{"pos"} < $curr_ref->{"repEnd"}-$curr_ref->{"repStart"}+1-$curr_overlap+$min_overlap){
+						if ($individual_indel1->{"pos"} < $curr_overlap and $individual_indel1->{"pos"} > $curr_overlap-$min_overlap){
+							$tempOverlap_length1 += length($individual_indel1->{"seq"});
+						}
+					}
+					for my $individual_indel2 in (@{$hash_ref->{"indel_matrix"}}){
+						if ($individual_indel2->{"pos"} > $hash_overlap-$min_overlap){
+							$tempOverlap_length2 += length($individual_indel2->{"seq"});
+						}
+					}
+					if ($tempOverlap_length1 <= $tempOverlap_length2){
+						if ($min_overlap == $curr_overlap){
+							# last 2 section from curr_ref, first 1 section from hash_ref: keep all from curr_ref, push first part of hash_ref.
+							
+						}
+						#else all from curr_ref
+					}
+					else{
+						if ($min_overlap == $curr_overlap){
+							#last 1 section from curr_ref, first 2 sections from hash_ref: remove first part of curr_ref, push all hash_ref
+							
+						}
+						else{
+							#first and 3rd from curr_ref, middle one from hash_ref
+							
+						}
+					}
 					my $consensus = substr($hash_ref->{"repSeq"},0-$min_overlap);
 					my $overseq = "";
 					for(my $i=0;$i<length($consensus);$i++){
@@ -633,6 +715,8 @@ while (my ($te, $array_ref) = each(%repDB)){
 		#print "the last record not included!!!\n";
 		#print "not included:\n$curr_ref->{'chr'}\t$curr_ref->{'chrStart'}\t$curr_ref->{'chrEnd'}\t$curr_ref->{'strand'}\nstart is $curr_ref->{'repStart'}\nend is $curr_ref->{'repLeft'}\n\n";
 	}
+	# sort $msa_indels key descending
+	# foreach key, insert $msa_indels->{"seq"} to associated $seqobj->id. if use the longest length, and shorter seq supplimented with gap. 
 	print "$te alignment done!\n";
 	$pm->finish unless defined $msa;
 	unless ($msa->is_flush){ # quit and print error message if not all seqs in alignment have same length.
