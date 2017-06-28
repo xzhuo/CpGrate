@@ -370,7 +370,7 @@ for(my $i = 0; $i<= $#alignArray;$i++){
 		foreach my $gap(@descending_gaps){
 			$indel_seq = substr($chrSeq, $gap-1, 1);
 			if (scalar(@indel_matrix)){
-				for $indel in @indel_matrix{
+				for my $indel (@indel_matrix){
 					$indel{'pos'} -= 1;
 				}
 				if ($indel_matrix[-1]{'pos'} == $gap){
