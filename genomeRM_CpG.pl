@@ -740,7 +740,7 @@ while (my ($te, $array_ref) = each(%repDB)){
 			if ($maxium_length > 0){
 				my $temp_insertionMSA = Bio::SimpleAlign->new();
 				foreach my $seq_obj($msa->each_seq){
-					my $temp_displayId = $seq_obj->display_id()
+					my $temp_displayId = $seq_obj->display_id();
 					my $indel_seq;
 					if (exists $msa_indels{$pos}{$temp_displayId}) {
 						$indel_seq = $msa_indels{$pos}{$temp_displayId};
