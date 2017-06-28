@@ -573,7 +573,7 @@ while (my ($te, $array_ref) = each(%repDB)){
 				if($hash_ref->{"repEnd"}<$curr_ref->{"repStart"}){
 					$curr_ref->{"chrSeq"} = $hash_ref->{"chrSeq"}."-"x($curr_ref->{"repStart"}-$hash_ref->{"repEnd"}-1).$curr_ref->{"chrSeq"};
 					$curr_ref->{"repSeq"} = $hash_ref->{"repSeq"}."-"x($curr_ref->{"repStart"}-$hash_ref->{"repEnd"}-1).$curr_ref->{"repSeq"};
-					for $indel ($curr_ref->{"indel_matrix"}){
+					for my $indel ($curr_ref->{"indel_matrix"}){
 						$indel->{"pos"} = $indel->{"pos"} + $curr_ref->{"repStart"} - $hash_ref->{"repStart"};
 					}
 					push @{$curr_ref->{"indel_matrix"}}, @{$hash_ref->{"indel_matrix"}};
@@ -716,13 +716,13 @@ while (my ($te, $array_ref) = each(%repDB)){
 		if (defined $msa){
 			$msa->add_seq($tempSeq);
 			for my $indels ($curr_ref->{"indel_matrix"}){
-				$msa_indels{$indels->{'pos'} + $curr_ref->{"repStart"}-1}{$tempId} = $indels->{'seq'}}];
+				$msa_indels{$indels->{'pos'} + $curr_ref->{"repStart"}-1}{$tempId} = $indels->{'seq'};
 			}
 		}
 		else{
 			$msa = Bio::SimpleAlign->new(-seqs => [$tempSeq]);
 			for my $indels ($curr_ref->{"indel_matrix"}){
-				$msa_indels{$indels->{'pos'} + $curr_ref->{"repStart"}-1}{$tempId} = $indels->{'seq'}}];
+				$msa_indels{$indels->{'pos'} + $curr_ref->{"repStart"}-1}{$tempId} = $indels->{'seq'};
 			}
 		}
 	}
