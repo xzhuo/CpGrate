@@ -435,7 +435,7 @@ while (my ($te, $array_ref) = each(%repDB)){
 	my $curr_ref;
 	my $repfull;
 	my $msa;
-	my %msa_indels = ();
+	my %msa_indels;
 	if (defined $opts{d}){
 		$repfull = $db->get_Seq_by_id($te);
 		my $repfullseq = $repfull->seq();
@@ -690,6 +690,7 @@ while (my ($te, $array_ref) = each(%repDB)){
 				else{
 					$msa = Bio::SimpleAlign->new(-seqs => [$tempSeq]);
 					for my $indels ($curr_ref->{"indel_matrix"}){
+						print Dumper $indels;
 						$msa_indels{$indels->{'pos'} + $curr_ref->{"repStart"}-1}{$tempId} = $indels->{'seq'};
 					}
 				}
