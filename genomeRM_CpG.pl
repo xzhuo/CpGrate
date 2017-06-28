@@ -368,10 +368,10 @@ for(my $i = 0; $i<= $#alignArray;$i++){
 		my @descending_gaps = sort { $b<=>$a } @$gaps_ref;
 		my @indel_matrix = ();  # an array of hashes with each item like: {"pos"=>3, "seq"=> 'TA'}
 		foreach my $gap(@descending_gaps){
-			$indel_seq = substr($chrSeq, $gap-1, 1);
+			my $indel_seq = substr($chrSeq, $gap-1, 1);
 			if (scalar(@indel_matrix)){
 				for my $indel (@indel_matrix){
-					$indel{'pos'} -= 1;
+					$indel->	{'pos'} -= 1;
 				}
 				if ($indel_matrix[-1]{'pos'} == $gap){
 					$indel_matrix[-1]{'seq'} = $indel_seq.$indel_matrix[-1]{'seq'};
@@ -476,7 +476,7 @@ while (my ($te, $array_ref) = each(%repDB)){
 				if($hash_ref->{"repStart"}>$curr_ref->{"repEnd"}){
 					$curr_ref->{"chrSeq"} = $curr_ref->{"chrSeq"}."-"x($hash_ref->{"repStart"}-$curr_ref->{"repEnd"}-1).$hash_ref->{"chrSeq"};
 					$curr_ref->{"repSeq"} = $curr_ref->{"repSeq"}."-"x($hash_ref->{"repStart"}-$curr_ref->{"repEnd"}-1).$hash_ref->{"repSeq"};
-					for my $indel in (@{$hash_ref->{"indel_matrix"}}){
+					for my $indel (@{$hash_ref->{"indel_matrix"}}){
 						push @{$curr_ref->{"indel_matrix"}}, {"pos" => $indel->{"pos"}+$hash_ref->{"repStart"}-$curr_ref->{"repStart"}, "seq" => $indel{"seq"}};
 					}
 
