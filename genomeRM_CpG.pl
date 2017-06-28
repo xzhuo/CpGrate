@@ -731,23 +731,24 @@ while (my ($te, $array_ref) = each(%repDB)){
 		#print "not included:\n$curr_ref->{'chr'}\t$curr_ref->{'chrStart'}\t$curr_ref->{'chrEnd'}\t$curr_ref->{'strand'}\nstart is $curr_ref->{'repStart'}\nend is $curr_ref->{'repLeft'}\n\n";
 	}
 	# sort $msa_indels key descending
-	# foreach key, insert $msa_indels->{"seq"} to associated $seqobj->id. if use the longest length, and shorter seq supplimented with gap.
+	# foreach key, insert $msa_indels->{"seq"} to associated $seq_obj->id. if use the longest length, and shorter seq supplimented with gap.
 	if ($opts{i}){
 		for my $pos (sort {$b <=> $a} keys %msa_indels){
 			# maxium length
 			my @all_indel_lengths = map {length($msa_indels{$pos}{$_})} keys %{$msa_indels{$pos}};
 			my $maxium_length = max(@all_indel_lengths);
 			if ($maxium_length > 0){
-				$temp_insertionMSA = Bio::SimpleAlign->new();
+				my $temp_insertionMSA = Bio::SimpleAlign->new();
 				foreach my $seq_obj($msa->each_seq){
-					$temp_displayId = $seqobj->display_id()
+					my $temp_displayId = $seq_obj->display_id()
+					my $indel_seq;
 					if (exists $msa_indels{$pos}{$temp_displayId}) {
 						$indel_seq = $msa_indels{$pos}{$temp_displayId};
 					}
 					else{
 						$indel_seq = "";
 					}
-					$insertion_seq = '-'x($maxium_length-length($indel_seq)).$indel_seq;
+					my $insertion_seq = '-'x($maxium_length-length($indel_seq)).$indel_seq;
 					my $tempSeq = Bio::LocatableSeq->new(-seq => $insertion_seq,
 										-id => $temp_displayId,
 										-alphabet => "dna",
