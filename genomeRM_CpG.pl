@@ -477,7 +477,7 @@ while (my ($te, $array_ref) = each(%repDB)){
 					$curr_ref->{"chrSeq"} = $curr_ref->{"chrSeq"}."-"x($hash_ref->{"repStart"}-$curr_ref->{"repEnd"}-1).$hash_ref->{"chrSeq"};
 					$curr_ref->{"repSeq"} = $curr_ref->{"repSeq"}."-"x($hash_ref->{"repStart"}-$curr_ref->{"repEnd"}-1).$hash_ref->{"repSeq"};
 					for my $indel (@{$hash_ref->{"indel_matrix"}}){
-						push @{$curr_ref->{"indel_matrix"}}, {"pos" => $indel->{"pos"}+$hash_ref->{"repStart"}-$curr_ref->{"repStart"}, "seq" => $indel{"seq"}};
+						push @{$curr_ref->{"indel_matrix"}}, {"pos" => $indel->{"pos"}+$hash_ref->{"repStart"}-$curr_ref->{"repStart"}, "seq" => $indel->{"seq"}};
 					}
 
 					$curr_ref->{"repEnd"} = $hash_ref->{"repEnd"};
@@ -520,7 +520,7 @@ while (my ($te, $array_ref) = each(%repDB)){
 							# first 2 section from curr_ref, last 1 section from hash_ref: keep all from curr_ref, push last part of hash_ref.
 							for my $indel (@{$hash_ref->{"indel_matrix"}}){
 								if ($indel->{"pos"} >= $min_overlap){
-									push @{$curr_ref->{"indel_matrix"}}, {"pos" => $indel->{"pos"}+$hash_ref->{"repStart"}-$curr_ref->{"repStart"}, "seq" => $indel{"seq"}};
+									push @{$curr_ref->{"indel_matrix"}}, {"pos" => $indel->{"pos"}+$hash_ref->{"repStart"}-$curr_ref->{"repStart"}, "seq" => $indel->{"seq"}};
 								}
 							}
 						}
@@ -530,26 +530,26 @@ while (my ($te, $array_ref) = each(%repDB)){
 						if ($min_overlap == $curr_overlap){
 							#first 1 section from curr_ref, last 2 sections from hash_ref: remove last part of curr_ref, push all hash_ref
 							for my $indel (@{$curr_ref->{"indel_matrix"}}){
-								if ($indel{"pos"} > $hash_ref->{"repStart"}-$curr_ref->{"repStart"}){
-									$indel{"seq"} = "";
-									$indel{"pos"} = 0;  # is 0 ok here?
+								if ($indel->{"pos"} > $hash_ref->{"repStart"}-$curr_ref->{"repStart"}){
+									$indel->{"seq"} = "";
+									$indel->{"pos"} = 0;  # is 0 ok here?
 								}
 							}
 							for my $indel (@{$hash_ref->{"indel_matrix"}}){
-								push @{$curr_ref->{"indel_matrix"}}, {"pos" => $indel->{"pos"}+$hash_ref->{"repStart"}-$curr_ref->{"repStart"}, "seq" => $indel{"seq"}}; 
+								push @{$curr_ref->{"indel_matrix"}}, {"pos" => $indel->{"pos"}+$hash_ref->{"repStart"}-$curr_ref->{"repStart"}, "seq" => $indel->{"seq"}}; 
 							}
 
 						}
 						else{
 							#first and 3rd from curr_ref, middle one from hash_ref
 							for my $indel (@{$curr_ref->{"indel_matrix"}}){
-								if ($indel{"pos"} > $hash_ref->{"repStart"}-$curr_ref->{"repStart"} and $indel{"pos"} < $hash_ref->{"repEnd"}-$curr_ref->{"repStart"}+1){
-									$indel{"seq"} = "";
-									$indel{"pos"} = 0;  # is 0 ok here?
+								if ($indel->{"pos"} > $hash_ref->{"repStart"}-$curr_ref->{"repStart"} and $indel->{"pos"} < $hash_ref->{"repEnd"}-$curr_ref->{"repStart"}+1){
+									$indel->{"seq"} = "";
+									$indel->{"pos"} = 0;  # is 0 ok here?
 								}
 							}
 							for my $indel (@{$hash_ref->{"indel_matrix"}}){
-								push @{$curr_ref->{"indel_matrix"}}, {"pos" => $indel->{"pos"}+$hash_ref->{"repStart"}-$curr_ref->{"repStart"}, "seq" => $indel{"seq"}}; 
+								push @{$curr_ref->{"indel_matrix"}}, {"pos" => $indel->{"pos"}+$hash_ref->{"repStart"}-$curr_ref->{"repStart"}, "seq" => $indel->{"seq"}}; 
 							}
 						}
 					}
@@ -574,7 +574,7 @@ while (my ($te, $array_ref) = each(%repDB)){
 					$curr_ref->{"chrSeq"} = $hash_ref->{"chrSeq"}."-"x($curr_ref->{"repStart"}-$hash_ref->{"repEnd"}-1).$curr_ref->{"chrSeq"};
 					$curr_ref->{"repSeq"} = $hash_ref->{"repSeq"}."-"x($curr_ref->{"repStart"}-$hash_ref->{"repEnd"}-1).$curr_ref->{"repSeq"};
 					for $indel ($curr_ref->{"indel_matrix"}){
-						$indel{"pos"} = $indel{"pos"} + $curr_ref->{"repStart"} - $hash_ref->{"repStart"};
+						$indel->{"pos"} = $indel->{"pos"} + $curr_ref->{"repStart"} - $hash_ref->{"repStart"};
 					}
 					push @{$curr_ref->{"indel_matrix"}}, @{$hash_ref->{"indel_matrix"}};
 					$curr_ref->{"chrEnd"} = $hash_ref->{"chrEnd"};
@@ -615,7 +615,7 @@ while (my ($te, $array_ref) = each(%repDB)){
 						if ($min_overlap == $curr_overlap){
 							# last 2 section from curr_ref, first 1 section from hash_ref: keep all from curr_ref, push first part of hash_ref.
 							for my $indel (@{$curr_ref->{"indel_matrix"}}){
-								$indel{"pos"} += $curr_ref->{"repStart"}-$hash_ref->{"repStart"};
+								$indel->{"pos"} += $curr_ref->{"repStart"}-$hash_ref->{"repStart"};
 							}
 							for my $indel (@{$hash_ref->{"indel_matrix"}}){
 								if($indel->{"pos"} <= $curr_ref->{"repStart"}-$hash_ref->{"repStart"} and $indel->{"pos"} > 0){
@@ -630,8 +630,8 @@ while (my ($te, $array_ref) = each(%repDB)){
 							#last 1 section from curr_ref, first 2 sections from hash_ref: remove first part of curr_ref, push all hash_ref
 							for my $indel (@{$curr_ref->{"indel_matrix"}}){
 								if ($indel->{"pos"} < $curr_overlap){
-									$indel{"pos"} = 0;
-									$indel{"seq"} = "";
+									$indel->{"pos"} = 0;
+									$indel->{"seq"} = "";
 								}
 								else{
 									$indel->{"pos"} += $curr_ref->{"repStart"}-$hash_ref->{"repStart"};
@@ -645,8 +645,8 @@ while (my ($te, $array_ref) = each(%repDB)){
 							#first and 3rd from curr_ref, middle one from hash_ref
 							for my $indel (@{$curr_ref->{"indel_matrix"}}){
 								if ($indel->{"pos"} < $curr_overlap and $indel->{"pos"} > $hash_ref->{"repStart"}-$curr_ref->{"repStart"}){
-									$indel{"pos"} = 0;
-									$indel{"seq"} = "";
+									$indel->{"pos"} = 0;
+									$indel->{"seq"} = "";
 								}
 							}
 							for my $indel (@{$hash_ref->{"indel_matrix"}}){
@@ -683,13 +683,13 @@ while (my ($te, $array_ref) = each(%repDB)){
 				#add the chrSeq with insertions deleted to the MSA:
 				if (defined $msa){
 					$msa->add_seq($tempSeq);
-					for my $indels in ($curr_ref->{"indel_matrix"}){
+					for my $indels ($curr_ref->{"indel_matrix"}){
 						$msa_indels{$indels->{'pos'} + $curr_ref->{"repStart"}-1}{$tempId} = $indels->{'seq'};
 					}
 				}
 				else{
 					$msa = Bio::SimpleAlign->new(-seqs => [$tempSeq]);
-					for my $indels in ($curr_ref->{"indel_matrix"}){
+					for my $indels ($curr_ref->{"indel_matrix"}){
 						$msa_indels{$indels->{'pos'} + $curr_ref->{"repStart"}-1}{$tempId} = $indels->{'seq'};
 					}
 				}
@@ -715,13 +715,13 @@ while (my ($te, $array_ref) = each(%repDB)){
 		#add the chrSeq with insertions deleted to the MSA:
 		if (defined $msa){
 			$msa->add_seq($tempSeq);
-			for my $indels in ($curr_ref->{"indel_matrix"}){
+			for my $indels ($curr_ref->{"indel_matrix"}){
 				$msa_indels{$indels->{'pos'} + $curr_ref->{"repStart"}-1}{$tempId} = $indels->{'seq'}}];
 			}
 		}
 		else{
 			$msa = Bio::SimpleAlign->new(-seqs => [$tempSeq]);
-			for my $indels in ($curr_ref->{"indel_matrix"}){
+			for my $indels ($curr_ref->{"indel_matrix"}){
 				$msa_indels{$indels->{'pos'} + $curr_ref->{"repStart"}-1}{$tempId} = $indels->{'seq'}}];
 			}
 		}
