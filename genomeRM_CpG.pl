@@ -732,8 +732,8 @@ while (my ($te, $array_ref) = each(%repDB)){
 	}
 	# sort $msa_indels key descending
 	# foreach key, insert $msa_indels->{"seq"} to associated $seqobj->id. if use the longest length, and shorter seq supplimented with gap.
-	if $opts{i}{
-		for my $pos (sort {$b <=> $a} keys %$msa_indels){
+	if ($opts{i}){
+		for my $pos (sort {$b <=> $a} keys %msa_indels){
 			# maxium length
 			# map {length $msa_indels{$pos}{$_}} keys $msa_indels{$pos};
 			my $maxium_length = max(map {length $msa_indels{$pos}{$_}} keys $msa_indels{$pos});
