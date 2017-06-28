@@ -64,6 +64,7 @@ use Bio::SeqIO;
 use Bio::SimpleAlign;
 use Bio::LocatableSeq;
 use Bio::AlignIO;
+use Bio::Align::Utilities;
 use Bio::DB::Fasta;
 use File::Temp qw/ tempfile/;
 use Fcntl qw(:flock SEEK_END O_CREAT O_RDWR);
@@ -384,7 +385,7 @@ for(my $i = 0; $i<= $#alignArray;$i++){
 			substr($chrSeq, $gap-1, 1) = "";
 			substr($repSeq, $gap-1, 1) = "";
 		}
-		my @indel_matrix = sort {$a->{'pos'}<=>$b->{'pos'}} @indel_matrix;  # sort indel matrix by position ascending.
+		@indel_matrix = sort {$a->{'pos'}<=>$b->{'pos'}} @indel_matrix;  # sort indel matrix by position ascending.
 		$chrSeq =~ s/[^ATGC]/-/g;
 		$repSeq =~ s/[^ATGC]/-/g; # non-GATC NTs are not correctly revcom in repeatmasker alignment.
 
@@ -543,7 +544,7 @@ while (my ($te, $array_ref) = each(%repDB)){
 						else{
 							#first and 3rd from curr_ref, middle one from hash_ref
 							for my $indel in (@{$curr_ref->{"indel_matrix"}}){
-								if ($indel{"pos"} > $hash_ref->{"repStart"}-$curr_ref->{"repStart"}+1 and $indel{"pos"} < $hash_ref->{"repEnd"}-$curr_ref->{"repStart"}+1){
+								if ($indel{"pos"} > $hash_ref->{"repStart"}-$curr_ref->{"repStart"} and $indel{"pos"} < $hash_ref->{"repEnd"}-$curr_ref->{"repStart"}+1){
 									$indel{"seq"} = "";
 									$indel{"pos"} = 0;  # is 0 ok here?
 								}
@@ -615,18 +616,46 @@ while (my ($te, $array_ref) = each(%repDB)){
 					if ($tempOverlap_length1 <= $tempOverlap_length2){
 						if ($min_overlap == $curr_overlap){
 							# last 2 section from curr_ref, first 1 section from hash_ref: keep all from curr_ref, push first part of hash_ref.
-							
+							for my $indel in (@{$curr_ref->{"indel_matrix"}}){
+								$indel{"pos"} += $curr_ref->{"repStart"}-$hash_ref->{"repStart"};
+							}
+							for my $indel in (@{$hash_ref->{"indel_matrix"}}){
+								if($indel->{"pos"} < $curr_ref->{"repStart"}-$hash_ref->{"repStart"})
+									push @{$curr_ref->{"indel_matrix"}}, $indel;
+								}
+							}
 						}
 						#else all from curr_ref
 					}
 					else{
 						if ($min_overlap == $curr_overlap){
 							#last 1 section from curr_ref, first 2 sections from hash_ref: remove first part of curr_ref, push all hash_ref
-							
+							for my $indel in (@{$curr_ref->{"indel_matrix"}}){
+								if ($indel->{"pos"} < $curr_overlap){
+									$indel{"pos"} = 0;
+									$indel{"seq"} = "";
+								}
+								else{
+									$indel->{"pos"} += $curr_ref->{"repStart"}-$hash_ref->{"repStart"}
+								}
+							}
+							for my $indel in (@{$hash_ref->{"indel_matrix"}}){
+								if($indel->{"pos"} < $curr_ref->{"repStart"}-$hash_ref->{"repStart"})
+									push @{$curr_ref->{"indel_matrix"}}, $indel;
+								}
+							}
 						}
 						else{
 							#first and 3rd from curr_ref, middle one from hash_ref
-							
+							for my $indel in (@{$curr_ref->{"indel_matrix"}}){
+								if ($indel->{"pos"} < $curr_overlap and $indel->{"pos"} > $curr_overlap - $hash_overlap){
+									$indel{"pos"} = 0;
+									$indel{"seq"} = "";
+								}
+							}
+							for my $indel in (@{$hash_ref->{"indel_matrix"}}){
+								push @{$curr_ref->{"indel_matrix"}}, {"pos"=>$indel->{"pos"}+$curr_overlap - $hash_overlap, "seq"=>$indel->{"seq"}};
+							}
 						}
 					}
 					my $consensus = substr($hash_ref->{"repSeq"},0-$min_overlap);
@@ -716,7 +745,32 @@ while (my ($te, $array_ref) = each(%repDB)){
 		#print "not included:\n$curr_ref->{'chr'}\t$curr_ref->{'chrStart'}\t$curr_ref->{'chrEnd'}\t$curr_ref->{'strand'}\nstart is $curr_ref->{'repStart'}\nend is $curr_ref->{'repLeft'}\n\n";
 	}
 	# sort $msa_indels key descending
-	# foreach key, insert $msa_indels->{"seq"} to associated $seqobj->id. if use the longest length, and shorter seq supplimented with gap. 
+	# foreach key, insert $msa_indels->{"seq"} to associated $seqobj->id. if use the longest length, and shorter seq supplimented with gap.
+	if $opts{i}{
+		@descending_pos = sort {$b <=> $a} keys %$msa_indels;
+		for $pos in (@descending_pos){
+			# maxium length
+			if ($maxium_length > 0){
+				$temp_insertionMSA = Bio::SimpleAlign->new();
+				foreach my $seq_obj($msa->each_seq){
+					$temp_displayId = $seqobj->display_id()
+					if ($msa_indels{$pos}{$temp_displayId} exists) {
+						$indel_seq = $msa_indels{$pos}{$seqobj->display_id()};
+					}
+					else{
+						$indel_seq = "";
+					}
+					$insertion_seq = '-'x($maxium_length-length($indel_seq)).$indel_seq;
+					my $tempSeq = Bio::LocatableSeq->new(-seq => $insertion_seq,
+										-id => $temp_displayId,
+										-alphabet => "dna",
+									);
+					$temp_insertionMSA->add_seq($tempSeq);
+				}
+				$msa = cat($msa->slice(1,$pos), $temp_insertionMSA, $msa->slice($pos+1,$msa->length()))
+			}
+		}
+	}
 	print "$te alignment done!\n";
 	$pm->finish unless defined $msa;
 	unless ($msa->is_flush){ # quit and print error message if not all seqs in alignment have same length.
