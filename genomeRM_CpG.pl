@@ -735,8 +735,8 @@ while (my ($te, $array_ref) = each(%repDB)){
 	if ($opts{i}){
 		for my $pos (sort {$b <=> $a} keys %msa_indels){
 			# maxium length
-			# map {length $msa_indels{$pos}{$_}} keys $msa_indels{$pos};
-			my $maxium_length = max(map {length $msa_indels{$pos}{$_}} keys $msa_indels{$pos});
+			my @all_indel_lengths = map {length($msa_indels{$pos}{$_})} keys $msa_indels{$pos};
+			my $maxium_length = max(@all_indel_lengths);
 			if ($maxium_length > 0){
 				$temp_insertionMSA = Bio::SimpleAlign->new();
 				foreach my $seq_obj($msa->each_seq){
