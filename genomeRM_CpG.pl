@@ -505,12 +505,12 @@ while (my ($te, $array_ref) = each(%repDB)){
 					my $tempseq2 = substr($hash_ref->{"chrSeq"},0,$min_overlap);
 					my $tempOverlap_length1 = 0;
 					my $tempOverlap_length2 = 0;
-					for my $individual_indel1 in (@{$curr_ref->{"indel_matrix"}}){
+					for my $individual_indel1 (@{$curr_ref->{"indel_matrix"}}){
 						if ($individual_indel1->{"pos"} > $hash_ref->{"repStart"}-$curr_ref->{"repStart"} and $individual_indel1->{"pos"} < $hash_ref->{"repStart"}+$min_overlap-$curr_ref->{"repStart"}+1){
 							$tempOverlap_length1 += length($individual_indel1->{"seq"});
 						}
 					}
-					for my $individual_indel2 in (@{$hash_ref->{"indel_matrix"}}){
+					for my $individual_indel2 (@{$hash_ref->{"indel_matrix"}}){
 						if ($individual_indel2->{"pos"} > 0 and $individual_indel2->{"pos"} < $min_overlap){
 							$tempOverlap_length2 += length($individual_indel2->{"seq"});
 						}
@@ -518,7 +518,7 @@ while (my ($te, $array_ref) = each(%repDB)){
 					if ($tempOverlap_length1 <= $tempOverlap_length2){  # insertions in curr_ref overlap region is shorter, so curr_ref overlap sequence is better.
 						if ($min_overlap == $curr_overlap){
 							# first 2 section from curr_ref, last 1 section from hash_ref: keep all from curr_ref, push last part of hash_ref.
-							for my $indel in (@{$hash_ref->{"indel_matrix"}}){
+							for my $indel (@{$hash_ref->{"indel_matrix"}}){
 								if ($indel->{"pos"} >= $min_overlap){
 									push @{$curr_ref->{"indel_matrix"}}, {"pos" => $indel->{"pos"}+$hash_ref->{"repStart"}-$curr_ref->{"repStart"}, "seq" => $indel{"seq"}};
 								}
@@ -529,26 +529,26 @@ while (my ($te, $array_ref) = each(%repDB)){
 					else{  # insertions in hash_ref overlap region is shorter, so hasg_ref overlap sequence is better.
 						if ($min_overlap == $curr_overlap){
 							#first 1 section from curr_ref, last 2 sections from hash_ref: remove last part of curr_ref, push all hash_ref
-							for my $indel in (@{$curr_ref->{"indel_matrix"}}){
+							for my $indel (@{$curr_ref->{"indel_matrix"}}){
 								if ($indel{"pos"} > $hash_ref->{"repStart"}-$curr_ref->{"repStart"}){
 									$indel{"seq"} = "";
 									$indel{"pos"} = 0;  # is 0 ok here?
 								}
 							}
-							for my $indel in (@{$hash_ref->{"indel_matrix"}}){
+							for my $indel (@{$hash_ref->{"indel_matrix"}}){
 								push @{$curr_ref->{"indel_matrix"}}, {"pos" => $indel->{"pos"}+$hash_ref->{"repStart"}-$curr_ref->{"repStart"}, "seq" => $indel{"seq"}}; 
 							}
 
 						}
 						else{
 							#first and 3rd from curr_ref, middle one from hash_ref
-							for my $indel in (@{$curr_ref->{"indel_matrix"}}){
+							for my $indel (@{$curr_ref->{"indel_matrix"}}){
 								if ($indel{"pos"} > $hash_ref->{"repStart"}-$curr_ref->{"repStart"} and $indel{"pos"} < $hash_ref->{"repEnd"}-$curr_ref->{"repStart"}+1){
 									$indel{"seq"} = "";
 									$indel{"pos"} = 0;  # is 0 ok here?
 								}
 							}
-							for my $indel in (@{$hash_ref->{"indel_matrix"}}){
+							for my $indel (@{$hash_ref->{"indel_matrix"}}){
 								push @{$curr_ref->{"indel_matrix"}}, {"pos" => $indel->{"pos"}+$hash_ref->{"repStart"}-$curr_ref->{"repStart"}, "seq" => $indel{"seq"}}; 
 							}
 						}
@@ -573,7 +573,7 @@ while (my ($te, $array_ref) = each(%repDB)){
 				if($hash_ref->{"repEnd"}<$curr_ref->{"repStart"}){
 					$curr_ref->{"chrSeq"} = $hash_ref->{"chrSeq"}."-"x($curr_ref->{"repStart"}-$hash_ref->{"repEnd"}-1).$curr_ref->{"chrSeq"};
 					$curr_ref->{"repSeq"} = $hash_ref->{"repSeq"}."-"x($curr_ref->{"repStart"}-$hash_ref->{"repEnd"}-1).$curr_ref->{"repSeq"};
-					for $indel in ($curr_ref->{"indel_matrix"}){
+					for $indel ($curr_ref->{"indel_matrix"}){
 						$indel{"pos"} = $indel{"pos"} + $curr_ref->{"repStart"} - $hash_ref->{"repStart"};
 					}
 					push @{$curr_ref->{"indel_matrix"}}, @{$hash_ref->{"indel_matrix"}};
@@ -601,12 +601,12 @@ while (my ($te, $array_ref) = each(%repDB)){
 					my $tempseq2 = substr($hash_ref->{"chrSeq"},0-$min_overlap);
 					my $tempOverlap_length1 = 0;
 					my $tempOverlap_length2 = 0;
-					for my $individual_indel1 in (@{$curr_ref->{"indel_matrix"}}){
+					for my $individual_indel1 (@{$curr_ref->{"indel_matrix"}}){
 						if ($individual_indel1->{"pos"} < $curr_overlap and $individual_indel1->{"pos"} > $curr_overlap-$min_overlap){
 							$tempOverlap_length1 += length($individual_indel1->{"seq"});
 						}
 					}
-					for my $individual_indel2 in (@{$hash_ref->{"indel_matrix"}}){
+					for my $individual_indel2 (@{$hash_ref->{"indel_matrix"}}){
 						if ($individual_indel2->{"pos"} > $hash_overlap-$min_overlap){
 							$tempOverlap_length2 += length($individual_indel2->{"seq"});
 						}
@@ -614,10 +614,10 @@ while (my ($te, $array_ref) = each(%repDB)){
 					if ($tempOverlap_length1 <= $tempOverlap_length2){
 						if ($min_overlap == $curr_overlap){
 							# last 2 section from curr_ref, first 1 section from hash_ref: keep all from curr_ref, push first part of hash_ref.
-							for my $indel in (@{$curr_ref->{"indel_matrix"}}){
+							for my $indel (@{$curr_ref->{"indel_matrix"}}){
 								$indel{"pos"} += $curr_ref->{"repStart"}-$hash_ref->{"repStart"};
 							}
-							for my $indel in (@{$hash_ref->{"indel_matrix"}}){
+							for my $indel (@{$hash_ref->{"indel_matrix"}}){
 								if($indel->{"pos"} <= $curr_ref->{"repStart"}-$hash_ref->{"repStart"} and $indel->{"pos"} > 0){
 									push @{$curr_ref->{"indel_matrix"}}, $indel;
 								}
@@ -628,7 +628,7 @@ while (my ($te, $array_ref) = each(%repDB)){
 					else{
 						if ($min_overlap == $curr_overlap){
 							#last 1 section from curr_ref, first 2 sections from hash_ref: remove first part of curr_ref, push all hash_ref
-							for my $indel in (@{$curr_ref->{"indel_matrix"}}){
+							for my $indel (@{$curr_ref->{"indel_matrix"}}){
 								if ($indel->{"pos"} < $curr_overlap){
 									$indel{"pos"} = 0;
 									$indel{"seq"} = "";
@@ -637,19 +637,19 @@ while (my ($te, $array_ref) = each(%repDB)){
 									$indel->{"pos"} += $curr_ref->{"repStart"}-$hash_ref->{"repStart"};
 								}
 							}
-							for my $indel in (@{$hash_ref->{"indel_matrix"}}){
+							for my $indel (@{$hash_ref->{"indel_matrix"}}){
 								push @{$curr_ref->{"indel_matrix"}}, $indel;
 							}
 						}
 						else{
 							#first and 3rd from curr_ref, middle one from hash_ref
-							for my $indel in (@{$curr_ref->{"indel_matrix"}}){
+							for my $indel (@{$curr_ref->{"indel_matrix"}}){
 								if ($indel->{"pos"} < $curr_overlap and $indel->{"pos"} > $hash_ref->{"repStart"}-$curr_ref->{"repStart"}){
 									$indel{"pos"} = 0;
 									$indel{"seq"} = "";
 								}
 							}
-							for my $indel in (@{$hash_ref->{"indel_matrix"}}){
+							for my $indel (@{$hash_ref->{"indel_matrix"}}){
 								push @{$curr_ref->{"indel_matrix"}}, {"pos"=>$indel->{"pos"}+$hash_ref->{"repStart"}-$curr_ref->{"repStart"}, "seq"=>$indel->{"seq"}};
 							}
 						}
