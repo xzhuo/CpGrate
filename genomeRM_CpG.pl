@@ -70,6 +70,7 @@ use File::Temp qw/ tempfile/;
 use Fcntl qw(:flock SEEK_END O_CREAT O_RDWR);
 use IO::Handle;
 use Statistics::Basic qw(:all);
+use List::Util qw(max);
 use BerkeleyDB;
 use MLDBM qw(BerkeleyDB::Hash);
 # use Set::IntervalTree;
@@ -365,22 +366,22 @@ for(my $i = 0; $i<= $#alignArray;$i++){
 		$repSeq = uc($repSeq);
 		my $gaps_ref = Func::find($repSeq, "-"); #gap in repSeq means insertions in chrSeq, we have to find them out. save them to another hash if $opts{i}, else delete them.
 		my @descending_gaps = sort { $b<=>$a } @$gaps_ref;
-		my @indel_matrix = ();  # an array of hashes with each item like: {pos:3, seq: 'TA'}
+		my @indel_matrix = ();  # an array of hashes with each item like: {"pos"=>3, "seq"=> 'TA'}
 		foreach my $gap(@descending_gaps){
 			$indel_seq = substr($chrSeq, $gap-1, 1);
 			if (scalar(@indel_matrix)){
 				for $indel in @indel_matrix{
 					$indel{'pos'} -= 1;
 				}
-				if $indel_matrix[-1]{'pos'} == $gap{
+				if ($indel_matrix[-1]{'pos'} == $gap){
 					$indel_matrix[-1]{'seq'} = $indel_seq.$indel_matrix[-1]{'seq'};
 				}
 				else{
-					push @indel_matrix, ('pos' => $gap, 'seq' => $indel_seq);
+					push @indel_matrix, {'pos' => $gap, 'seq' => $indel_seq};
 				}
 			}
 			else{
-				push @indel_matrix, ('pos' => $gap, 'seq' => $indel_seq);
+				push @indel_matrix, {'pos' => $gap, 'seq' => $indel_seq};
 			}
 			substr($chrSeq, $gap-1, 1) = "";
 			substr($repSeq, $gap-1, 1) = "";
@@ -505,39 +506,37 @@ while (my ($te, $array_ref) = each(%repDB)){
 					my $tempOverlap_length1 = 0;
 					my $tempOverlap_length2 = 0;
 					for my $individual_indel1 in (@{$curr_ref->{"indel_matrix"}}){
-						if ($individual_indel1->{"pos"} > $curr_ref->{"repEnd"}-$curr_ref->{"repStart"}+1-$curr_overlap and $individual_indel1->{"pos"} < $curr_ref->{"repEnd"}-$curr_ref->{"repStart"}+1-$curr_overlap+$min_overlap){
+						if ($individual_indel1->{"pos"} > $hash_ref->{"repStart"}-$curr_ref->{"repStart"} and $individual_indel1->{"pos"} < $hash_ref->{"repStart"}+$min_overlap-$curr_ref->{"repStart"}+1){
 							$tempOverlap_length1 += length($individual_indel1->{"seq"});
 						}
 					}
 					for my $individual_indel2 in (@{$hash_ref->{"indel_matrix"}}){
-						if ($individual_indel2->{"pos"} < $min_overlap){
+						if ($individual_indel2->{"pos"} > 0 and $individual_indel2->{"pos"} < $min_overlap){
 							$tempOverlap_length2 += length($individual_indel2->{"seq"});
 						}
 					}
-					if ($tempOverlap_length1 <= $tempOverlap_length2){
+					if ($tempOverlap_length1 <= $tempOverlap_length2){  # insertions in curr_ref overlap region is shorter, so curr_ref overlap sequence is better.
 						if ($min_overlap == $curr_overlap){
 							# first 2 section from curr_ref, last 1 section from hash_ref: keep all from curr_ref, push last part of hash_ref.
 							for my $indel in (@{$hash_ref->{"indel_matrix"}}){
-								if ($indel->{"pos"} > $min_overlap){
-									push @{$curr_ref->{"indel_matrix"}}, {"pos" => $indel->{"pos"}+$curr_ref->{"repEnd"}-$curr_ref->{"repStart"}+1-$curr_overlap, "seq" => $indel{"seq"}};
+								if ($indel->{"pos"} >= $min_overlap){
+									push @{$curr_ref->{"indel_matrix"}}, {"pos" => $indel->{"pos"}+$hash_ref->{"repStart"}-$curr_ref->{"repStart"}, "seq" => $indel{"seq"}};
 								}
 							}
 						}
 						#else all from curr_ref
 					}
-					else{
+					else{  # insertions in hash_ref overlap region is shorter, so hasg_ref overlap sequence is better.
 						if ($min_overlap == $curr_overlap){
 							#first 1 section from curr_ref, last 2 sections from hash_ref: remove last part of curr_ref, push all hash_ref
 							for my $indel in (@{$curr_ref->{"indel_matrix"}}){
-								if ($indel{"pos"} > $hash_ref->{"repStart"}-$curr_ref->{"repStart"}+1){
+								if ($indel{"pos"} > $hash_ref->{"repStart"}-$curr_ref->{"repStart"}){
 									$indel{"seq"} = "";
 									$indel{"pos"} = 0;  # is 0 ok here?
 								}
 							}
 							for my $indel in (@{$hash_ref->{"indel_matrix"}}){
-								if ($indel{"pos"} > $min_overlap){
-									push @{$curr_ref->{"indel_matrix"}}, {"pos" => $indel->{"pos"}+$curr_ref->{"repEnd"}-$curr_ref->{"repStart"}+1-$curr_overlap, "seq" => $indel{"seq"}}; 
-								}
+								push @{$curr_ref->{"indel_matrix"}}, {"pos" => $indel->{"pos"}+$hash_ref->{"repStart"}-$curr_ref->{"repStart"}, "seq" => $indel{"seq"}}; 
 							}
 
 						}
@@ -550,7 +549,7 @@ while (my ($te, $array_ref) = each(%repDB)){
 								}
 							}
 							for my $indel in (@{$hash_ref->{"indel_matrix"}}){
-								push @{$curr_ref->{"indel_matrix"}}, {"pos" => $indel->{"pos"}+$curr_ref->{"repEnd"}-$curr_ref->{"repStart"}+1-$curr_overlap, "seq" => $indel{"seq"}}; 
+								push @{$curr_ref->{"indel_matrix"}}, {"pos" => $indel->{"pos"}+$hash_ref->{"repStart"}-$curr_ref->{"repStart"}, "seq" => $indel{"seq"}}; 
 							}
 						}
 					}
@@ -570,7 +569,7 @@ while (my ($te, $array_ref) = each(%repDB)){
 					$curr_ref->{"chrEnd"} = $hash_ref->{"chrEnd"} if $hash_ref->{"chrEnd"} > $curr_ref->{"chrEnd"};
 				}
 			}
-			else{
+			else{  # - strand
 				if($hash_ref->{"repEnd"}<$curr_ref->{"repStart"}){
 					$curr_ref->{"chrSeq"} = $hash_ref->{"chrSeq"}."-"x($curr_ref->{"repStart"}-$hash_ref->{"repEnd"}-1).$curr_ref->{"chrSeq"};
 					$curr_ref->{"repSeq"} = $hash_ref->{"repSeq"}."-"x($curr_ref->{"repStart"}-$hash_ref->{"repEnd"}-1).$curr_ref->{"repSeq"};
@@ -603,7 +602,6 @@ while (my ($te, $array_ref) = each(%repDB)){
 					my $tempOverlap_length1 = 0;
 					my $tempOverlap_length2 = 0;
 					for my $individual_indel1 in (@{$curr_ref->{"indel_matrix"}}){
-						if ($individual_indel1->{"pos"} > $curr_ref->{"repEnd"}-$curr_ref->{"repStart"}+1-$curr_overlap and $individual_indel1->{"pos"} < $curr_ref->{"repEnd"}-$curr_ref->{"repStart"}+1-$curr_overlap+$min_overlap){
 						if ($individual_indel1->{"pos"} < $curr_overlap and $individual_indel1->{"pos"} > $curr_overlap-$min_overlap){
 							$tempOverlap_length1 += length($individual_indel1->{"seq"});
 						}
@@ -620,7 +618,7 @@ while (my ($te, $array_ref) = each(%repDB)){
 								$indel{"pos"} += $curr_ref->{"repStart"}-$hash_ref->{"repStart"};
 							}
 							for my $indel in (@{$hash_ref->{"indel_matrix"}}){
-								if($indel->{"pos"} < $curr_ref->{"repStart"}-$hash_ref->{"repStart"})
+								if($indel->{"pos"} <= $curr_ref->{"repStart"}-$hash_ref->{"repStart"} and $indel->{"pos"} > 0){
 									push @{$curr_ref->{"indel_matrix"}}, $indel;
 								}
 							}
@@ -636,25 +634,23 @@ while (my ($te, $array_ref) = each(%repDB)){
 									$indel{"seq"} = "";
 								}
 								else{
-									$indel->{"pos"} += $curr_ref->{"repStart"}-$hash_ref->{"repStart"}
+									$indel->{"pos"} += $curr_ref->{"repStart"}-$hash_ref->{"repStart"};
 								}
 							}
 							for my $indel in (@{$hash_ref->{"indel_matrix"}}){
-								if($indel->{"pos"} < $curr_ref->{"repStart"}-$hash_ref->{"repStart"})
-									push @{$curr_ref->{"indel_matrix"}}, $indel;
-								}
+								push @{$curr_ref->{"indel_matrix"}}, $indel;
 							}
 						}
 						else{
 							#first and 3rd from curr_ref, middle one from hash_ref
 							for my $indel in (@{$curr_ref->{"indel_matrix"}}){
-								if ($indel->{"pos"} < $curr_overlap and $indel->{"pos"} > $curr_overlap - $hash_overlap){
+								if ($indel->{"pos"} < $curr_overlap and $indel->{"pos"} > $hash_ref->{"repStart"}-$curr_ref->{"repStart"}){
 									$indel{"pos"} = 0;
 									$indel{"seq"} = "";
 								}
 							}
 							for my $indel in (@{$hash_ref->{"indel_matrix"}}){
-								push @{$curr_ref->{"indel_matrix"}}, {"pos"=>$indel->{"pos"}+$curr_overlap - $hash_overlap, "seq"=>$indel->{"seq"}};
+								push @{$curr_ref->{"indel_matrix"}}, {"pos"=>$indel->{"pos"}+$hash_ref->{"repStart"}-$curr_ref->{"repStart"}, "seq"=>$indel->{"seq"}};
 							}
 						}
 					}
@@ -688,18 +684,13 @@ while (my ($te, $array_ref) = each(%repDB)){
 				if (defined $msa){
 					$msa->add_seq($tempSeq);
 					for my $indels in ($curr_ref->{"indel_matrix"}){
-						if ($msa_indels{$indels->{'pos'} + $curr_ref->{"repStart"}-1} exists){
-							push @{$msa_indels{$indels->{'pos'} + $curr_ref->{"repStart"}-1}}, {$tempId => $indels->{'seq'}};
-						}
-						else{
-							$msa_indels{$indels->{'pos'} + $curr_ref->{"repStart"}-1} = [{$tempId => $indels->{'seq'}}];
-						}
+						$msa_indels{$indels->{'pos'} + $curr_ref->{"repStart"}-1}{$tempId} = $indels->{'seq'};
 					}
 				}
 				else{
 					$msa = Bio::SimpleAlign->new(-seqs => [$tempSeq]);
 					for my $indels in ($curr_ref->{"indel_matrix"}){
-						$msa_indels{$indels->{'pos'} + $curr_ref->{"repStart"}-1} = [{$tempId => $indels->{'seq'}}];
+						$msa_indels{$indels->{'pos'} + $curr_ref->{"repStart"}-1}{$tempId} = $indels->{'seq'};
 					}
 				}
 			}
@@ -725,18 +716,13 @@ while (my ($te, $array_ref) = each(%repDB)){
 		if (defined $msa){
 			$msa->add_seq($tempSeq);
 			for my $indels in ($curr_ref->{"indel_matrix"}){
-				if ($msa_indels{$indels->{'pos'} + $curr_ref->{"repStart"}-1} exists){
-					push @{$msa_indels{$indels->{'pos'} + $curr_ref->{"repStart"}-1}}, {$tempId => $indels->{'seq'}};
-				}
-				else{
-					$msa_indels{$indels->{'pos'} + $curr_ref->{"repStart"}-1} = [{$tempId => $indels->{'seq'}}];
-				}
+				$msa_indels{$indels->{'pos'} + $curr_ref->{"repStart"}-1}{$tempId} = $indels->{'seq'}}];
 			}
 		}
 		else{
 			$msa = Bio::SimpleAlign->new(-seqs => [$tempSeq]);
 			for my $indels in ($curr_ref->{"indel_matrix"}){
-				$msa_indels{$indels->{'pos'} + $curr_ref->{"repStart"}-1} = [{$tempId => $indels->{'seq'}}];
+				$msa_indels{$indels->{'pos'} + $curr_ref->{"repStart"}-1}{$tempId} = $indels->{'seq'}}];
 			}
 		}
 	}
@@ -747,15 +733,16 @@ while (my ($te, $array_ref) = each(%repDB)){
 	# sort $msa_indels key descending
 	# foreach key, insert $msa_indels->{"seq"} to associated $seqobj->id. if use the longest length, and shorter seq supplimented with gap.
 	if $opts{i}{
-		@descending_pos = sort {$b <=> $a} keys %$msa_indels;
-		for $pos in (@descending_pos){
+		for my $pos (sort {$b <=> $a} keys %$msa_indels){
 			# maxium length
+			# map {length $msa_indels{$pos}{$_}} keys $msa_indels{$pos};
+			my $maxium_length = max(map {length $msa_indels{$pos}{$_}} keys $msa_indels{$pos});
 			if ($maxium_length > 0){
 				$temp_insertionMSA = Bio::SimpleAlign->new();
 				foreach my $seq_obj($msa->each_seq){
 					$temp_displayId = $seqobj->display_id()
-					if ($msa_indels{$pos}{$temp_displayId} exists) {
-						$indel_seq = $msa_indels{$pos}{$seqobj->display_id()};
+					if (exists $msa_indels{$pos}{$temp_displayId}) {
+						$indel_seq = $msa_indels{$pos}{$temp_displayId};
 					}
 					else{
 						$indel_seq = "";
