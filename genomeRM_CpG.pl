@@ -763,7 +763,7 @@ while (my ($te, $array_ref) = each(%repDB)){
 									);
 					$temp_insertionMSA->add_seq($tempSeq);
 				}
-				$msa = cat($msa->slice(1,$pos,1), $temp_insertionMSA, $msa->slice($pos+1,$msa->length(),1))
+				$msa = cat($msa->slice(1,$pos-1,1), $temp_insertionMSA, $msa->slice($pos,$msa->length(),1))
 			}
 		}
 	}
