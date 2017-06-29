@@ -361,7 +361,7 @@ for(my $i = 0; $i<= $#alignArray;$i++){
 		$chrSeq = Func::revcom($chrSeq) if $strand eq 'C';
 		$repSeq = Func::revcom($repSeq) if $strand eq 'C';
 		#delete leading gaps and trailing gaps in repSeq, and delete correlated nt in chrSeq
-		$repSeq =~ /^(-*).*(-*)$/;
+		$repSeq =~ /^(-*)[^-].*[^-](-*)$/;
 		my $leadinggap_length = length($1);
 		my $trailinggap_length = length($2);
 		if ($leadinggap_length > 0){
