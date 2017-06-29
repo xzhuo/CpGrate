@@ -364,13 +364,13 @@ for(my $i = 0; $i<= $#alignArray;$i++){
 		$repSeq =~ /^(-*)[^-].*[^-](-*)$/;
 		my $leadinggap_length = length($1);
 		my $trailinggap_length = length($2);
-		if ($leadinggap_length > 0){
+		if ($trailinggap_length > 0){
+			$repSeq = substr($repSeq,$leadinggap_length,-$trailinggap_length);
+			$chrSeq = substr($chrSeq,$leadinggap_length,-$trailinggap_length);
+		}
+		else{
 			$repSeq = substr($repSeq,$leadinggap_length);
 			$chrSeq = substr($chrSeq,$leadinggap_length);
-		}
-		if ($trailinggap_length > 0){
-			$repSeq = substr($repSeq,$trailinggap_length);
-			$chrSeq = substr($chrSeq,$trailinggap_length);
 		}
 		#delete insertions and create new mutiple alignment
 		$chrSeq = uc($chrSeq);
