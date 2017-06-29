@@ -360,7 +360,18 @@ for(my $i = 0; $i<= $#alignArray;$i++){
 		}
 		$chrSeq = Func::revcom($chrSeq) if $strand eq 'C';
 		$repSeq = Func::revcom($repSeq) if $strand eq 'C';
-
+		#delete leading gaps and trailing gaps in repSeq, and delete correlated nt in chrSeq
+		$repSeq =~ /^(-*).*(-*)$/;
+		my $leadinggap_length = length($1);
+		my $trailinggap_length = length($2);
+		if ($leadinggap_length > 0){
+			$repSeq = substr($repSeq,$leadinggap_length);
+			$chrSeq = substr($chrSeq,$leadinggap_length);
+		}
+		if ($trailinggap_length > 0){
+			$repSeq = substr($repSeq,$trailinggap_length);
+			$chrSeq = substr($chrSeq,$trailinggap_length);
+		}
 		#delete insertions and create new mutiple alignment
 		$chrSeq = uc($chrSeq);
 		$repSeq = uc($repSeq);
@@ -371,7 +382,7 @@ for(my $i = 0; $i<= $#alignArray;$i++){
 			my $indel_seq = substr($chrSeq, $gap-1, 1);
 			if (scalar(@indel_matrix)){
 				for my $indel (@indel_matrix){
-					$indel->	{'pos'} -= 1;
+					$indel->{'pos'} -= 1;
 				}
 				if ($indel_matrix[-1]{'pos'} == $gap){
 					$indel_matrix[-1]{'seq'} = $indel_seq.$indel_matrix[-1]{'seq'};
