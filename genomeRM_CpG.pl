@@ -75,7 +75,7 @@ use BerkeleyDB;
 use MLDBM qw(BerkeleyDB::Hash);
 # use Set::IntervalTree;
 use Data::Dumper;
-
+use File::Basename;
 
 STDERR->autoflush(1);
 STDOUT->autoflush(1);
@@ -176,6 +176,7 @@ print "Reading and processing ".$fileName."\n";
 #Open the align file
 open my $alignfile, "<$fileName";
 my $outName;
+my $outFileName = basename($fileName);
 my $outFasta;
 if (defined $targetClass || defined $targetRepeat || defined $maxStart || defined $maxLeft || defined $minlength){
 	my $target = "";
@@ -183,14 +184,14 @@ if (defined $targetClass || defined $targetRepeat || defined $maxStart || define
 	$target = $target.$targetRepeat if defined $targetRepeat;
 	$target = $target.".$maxStart-$maxLeft" if defined $maxStart && defined $maxLeft;
 	$target = $target.".$minlength" if defined $minlength;
-	$outName = "$fileName.$target.CpG.out";
-	$outFasta = "$fileName.$target.new_consensus.fa";
+	$outName = "$outFileName.$target.CpG.out";
+	$outFasta = "$outFileName.$target.new_consensus.fa";
 #	$outName = "fAlb15.$target.CpG.out";
 #	$outFasta = "fAlb15.$target.new_consensus.fa";
 }
 else{
-	$outName = "$fileName.CpG.out";
-	$outFasta = "$fileName.new_consensus.fa";
+	$outName = "$outFileName.CpG.out";
+	$outFasta = "$outFileName.new_consensus.fa";
 #	$outName = "fAlb15.CpG.out";
 #	$outFasta = "fAlb15.new_consensus.fa";
 }
