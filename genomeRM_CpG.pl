@@ -380,7 +380,6 @@ for(my $i = 0; $i<= $#alignArray;$i++){
 		my @descending_gaps = sort { $b<=>$a } @$gaps_ref;
 		my @indel_matrix = ();  # an array of hashes with each item like: {"pos"=>3, "seq"=> 'TA'}
 		foreach my $gap(@descending_gaps){
-			print "it is $genoName\n";
 			my $indel_seq = substr($chrSeq, $gap-1, 1);
 			if (scalar(@indel_matrix)){
 				for my $indel (@indel_matrix){
