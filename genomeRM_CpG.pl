@@ -340,7 +340,7 @@ for(my $i = 0; $i<= $#alignArray;$i++){
 			@arraySplit = split(/\t/, $alignArray[$k]);
 			if (($arraySplit[0] ne 'Matrix') &&($arraySplit[0] ne 'Transitions') && ($arraySplit[0] ne 'Gap_init') && ($arraySplit[0] ne 'Kimura') && ($strand eq '+')){
 				#Check to see if this is a chr sequence or a rep sequence
-				if ( $arraySplit[0] eq substr($genoName, 0,13) || $arraySplit[0] =~ /^\Q$genoName\E/){	#This is a chr seq
+				if ( $arraySplit[0] eq substr($genoName, 0, length($arraySplit[0])) || $arraySplit[0] =~ /^\Q$genoName\E/){	#This is a chr seq
 					$chrSeq = $chrSeq.$arraySplit[2];
 				}
 				else{  #This is the rep seq
@@ -351,7 +351,7 @@ for(my $i = 0; $i<= $#alignArray;$i++){
 			#Next check for the - (C) strand
 			if (($arraySplit[0] ne 'Matrix') && ($arraySplit[0] ne 'Transitions') && ($arraySplit[0] ne 'Gap_init') && ($arraySplit[0] ne 'Kimura') && ($strand eq 'C')){
 				#Check to see if this is a chr sequence or a rep sequence
-				if ($arraySplit[0] eq substr($genoName, 0,13) || $arraySplit[0] =~ /^\Q$genoName\E/){	#This is a chr seq
+				if ($arraySplit[0] eq substr($genoName, 0, length($arraySplit[0])) || $arraySplit[0] =~ /^\Q$genoName\E/){	#This is a chr seq
 					$chrSeq = $chrSeq.$arraySplit[2];
 				}
 				else{  #This is a rep seq
@@ -380,6 +380,7 @@ for(my $i = 0; $i<= $#alignArray;$i++){
 		my @descending_gaps = sort { $b<=>$a } @$gaps_ref;
 		my @indel_matrix = ();  # an array of hashes with each item like: {"pos"=>3, "seq"=> 'TA'}
 		foreach my $gap(@descending_gaps){
+			print "it is $genoName\n";
 			my $indel_seq = substr($chrSeq, $gap-1, 1);
 			if (scalar(@indel_matrix)){
 				for my $indel (@indel_matrix){
